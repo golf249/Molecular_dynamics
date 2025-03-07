@@ -18,6 +18,7 @@ struct Particle {
 class MolecularDynamics {
 public:
     MolecularDynamics(int numParticles, double dt, double Lx, double Ly, double Lz);
+    void initializeRandomEngine();
     void initializeParticles();
     void computeForces();
     void integrate();
@@ -31,6 +32,7 @@ private:
     double Lx, Ly, Lz;
     std::vector<Particle> particles;
     std::mt19937 rng;
+    std::uniform_real_distribution<double> uniform_dist;
 };
 
 #endif // MD_H
