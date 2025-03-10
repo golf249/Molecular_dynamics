@@ -179,6 +179,6 @@ void MolecularDynamics::outputParticleData(double time) {
 }
 
 void MolecularDynamics::outputKineticEnergy(double time) {
-    computeKineticEnergy();
+    MolecularDynamics::computeKineticEnergy();
     writeFile.writeKineticEnergy(time, kineticEnergy);
 }

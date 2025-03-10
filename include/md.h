@@ -17,6 +17,8 @@ public:
     void computeForces();
     void integrate();
     void applyBoundaryConditions();
+    void computeKineticEnergy();
+    void setTemperature(double temp);
     void runSimulation();
     void outputParticleData(double time);
     void outputKineticEnergy(double time);
@@ -29,6 +31,7 @@ private:
     double temp;
     double percent_type1;
     double finalTime;
+    double kineticEnergy;
     std::vector<Particle> particles;
     WriteFile writeFile; // Add WriteFile member
 };
