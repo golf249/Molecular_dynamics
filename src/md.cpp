@@ -104,48 +104,64 @@ bool MolecularDynamics::stabilityCheck(const std::array<double, 3>& position) {
 }
 
 void MolecularDynamics::computeForces() {
+    // Clear forces
     for (auto& p : particles) {
         p.setForce({0.0, 0.0, 0.0});
     }
-    for (size_t i = 0; i < particles.size(); ++i) {
-        for (size_t j = i + 1; j < particles.size(); ++j) {
-            int type_i = particles[i].getType();
-            int type_j = particles[j].getType();
-            double sigma2, epsilon;
 
-            if (type_i == 0 && type_j == 0) {
-                sigma2 = 1.0;
-                epsilon = 3.0;
-            } else if ((type_i == 0 && type_j == 1) || (type_i == 1 && type_j == 0)) {
-                sigma2 = 4.0;
-                epsilon = 15.0;
-            } else if (type_i == 1 && type_j == 1) {
-                sigma2 = 9.0;
-                epsilon = 60.0;
-            }
+    // Precompute sigma and epsilon values
+    static constexpr double sigma2[2][2] = {{1.0, 4.0}, {4.0, 9.0}};
+    static constexpr double epsilon[2][2] = {{3.0, 15.0}, {15.0, 60.0}};
 
-            std::array<double, 3> rij;
-            double r2 = 0.0;
-            for (int k = 0; k < 3; ++k) {
-                rij[k] = particles[i].getPosition()[k] - particles[j].getPosition()[k];
-                r2 += rij[k] * rij[k];
-            }
+    // Compute forces
+    const size_t n = particles.size();
+    for (size_t i = 0; i < n; ++i) {
+        // Cache particle i data
+        const auto& pos_i = particles[i].getPosition();
+        const int type_i = particles[i].getType();
+        auto& force_i = particles[i].getForce();
 
-            double sigma6 = sigma2 * sigma2 * sigma2;
-            double sigma12 = sigma6 * sigma6;
-            double r6 = r2 * r2 * r2;
-            double r12 = r6 * r6;
+        for (size_t j = i + 1; j < n; ++j) {
+            // Cache particle j data
+            const auto& pos_j = particles[j].getPosition();
+            const int type_j = particles[j].getType();
+            
+            // Compute distance components
+            const double dx = pos_i[0] - pos_j[0];
+            const double dy = pos_i[1] - pos_j[1];
+            const double dz = pos_i[2] - pos_j[2];
+            
+            // Compute r squared directly
+            const double r2 = dx * dx + dy * dy + dz * dz;
 
-            double f = 24.0 * epsilon * (2.0 * sigma12 / r12 - sigma6 / r6) / r2;
-            for (int k = 0; k < 3; ++k) {
-                double forceComponent = f * rij[k];
-                std::array<double, 3> force_i = particles[i].getForce();
-                std::array<double, 3> force_j = particles[j].getForce();
-                force_i[k] += forceComponent;
-                force_j[k] -= forceComponent;
-                particles[i].setForce(force_i);
-                particles[j].setForce(force_j);
-            }
+            // Get interaction parameters
+            const double sigma2_ij = sigma2[type_i][type_j];
+            const double epsilon_ij = epsilon[type_i][type_j];
+
+            // Compute powers of sigma and r
+            const double sigma6 = sigma2_ij * sigma2_ij * sigma2_ij;
+            const double sigma12 = sigma6 * sigma6;
+
+            // Precompute inverse powers (multiplication is faster than division)
+            const double inv_r2 = 1.0 / r2;
+            const double inv_r6 = inv_r2 * inv_r2 * inv_r2;
+            const double inv_r12 = inv_r6 * inv_r6;
+
+            // Calculate force magnitude
+            const double f = 24.0 * epsilon_ij * inv_r2 * (2.0 * sigma12 * inv_r12 - sigma6 * inv_r6);
+
+            // Update forces directly without temporary arrays
+            auto& force_j = particles[j].getForce();
+            const double fx = f * dx;
+            const double fy = f * dy;
+            const double fz = f * dz;
+            
+            force_i[0] += fx;
+            force_i[1] += fy;
+            force_i[2] += fz;
+            force_j[0] -= fx;
+            force_j[1] -= fy;
+            force_j[2] -= fz;
         }
     }
 }

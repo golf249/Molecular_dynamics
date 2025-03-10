@@ -17,7 +17,7 @@ public:
     const std::array<double, 3>& getVelocity() const;
     void setVelocity(const std::array<double, 3>& velocity);
 
-    const std::array<double, 3>& getForce() const;
+    std::array<double, 3>& getForce();
     void setForce(const std::array<double, 3>& force);
 
     double getMass() const;

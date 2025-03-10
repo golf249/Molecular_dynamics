@@ -21,7 +21,7 @@ void Particle::setVelocity(const std::array<double, 3>& velocity) {
     this->velocity = velocity;
 }
 
-const std::array<double, 3>& Particle::getForce() const {
+std::array<double, 3>& Particle::getForce() {
     return force;
 }
 
