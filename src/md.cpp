@@ -83,6 +83,8 @@ void MolecularDynamics::initializeParticles() {
 
             particles.emplace_back(position, velocity, 1); // append a new type 1 particle to the particles vector with the given position, velocity, and type
         }
+        // set the temp for if the user specific the temp
+        setTemperature();
     }
 }
 
@@ -129,13 +131,9 @@ void MolecularDynamics::computeForces() {
                 r2 += rij[k] * rij[k];
             }
 
-            double sigma2 = sigma * sigma;
-            double sigma6 = sigma2 * sigma2 * sigma2;
-            double sigma12 = sigma6 * sigma6;
-            double r6 = r2 * r2 * r2;
-            double r12 = r6 * r6;
+            double r = std::sqrt(r2);
+            double f = 24.0 * epsilon * ( (2.0 * pow(sigma, 12.0) / pow(r, 14.0)) - (pow(sigma, 6.0) / pow(r, 8.0)));
 
-            double f = 24.0 * epsilon * (2.0 * sigma12 / r12 - sigma6 / r6) / r2;
             for (int k = 0; k < 3; ++k) {
                 double forceComponent = f * rij[k];
                 std::array<double, 3> force_i = particles[i].getForce();
@@ -193,8 +191,15 @@ void MolecularDynamics::computeKineticEnergy() {
 }
 
 void MolecularDynamics::setTemperature() {
+    // If the temperature is not set, return
+    if (temp == -1.0) {
+            return;
+        };
+    
+    // Calculate the kinetic energy and temperature
     const double kb = 0.8314459920816467; // Boltzmann constant
-    double tempKE = (2.0 / (3.0 * kb)) * kineticEnergy;
+    MolecularDynamics::computeKineticEnergy();
+    const double tempKE = (2.0 / (3.0 * kb)) * kineticEnergy;
     const double lambda = std::sqrt(temp / tempKE);
     for (Particle& p : particles) {
         std::array<double, 3> velocity = p.getVelocity();
@@ -213,9 +218,8 @@ void MolecularDynamics::runSimulation() {
         integrate();
         if (testCase != -1) {
             outputParticleData(currentTime);
-        } else { 
-            setTemperature();
         }
+        outputParticleData(currentTime);
         outputKineticEnergy(currentTime);
     }
 }
