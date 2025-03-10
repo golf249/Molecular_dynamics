@@ -1,7 +1,10 @@
 #include "../include/md.h"
+#include <ctime>
+#include <cmath>
 
 MolecularDynamics::MolecularDynamics(int numParticles, double dt, double Lx, double Ly, double Lz, int testCase, double temp, double percent_type1, double finalTime)
     : N(numParticles), dt(dt), Lx(Lx), Ly(Ly), Lz(Lz), testCase(testCase), temp(temp), percent_type1(percent_type1), finalTime(finalTime), writeFile("particle_data.txt", "kinetic_energy.txt") {
+    std::srand(static_cast<unsigned int>(std::time(nullptr))); // Seed the random number generator with the current time
     initializeParticles();
 
     // Set final time based on test case if not provided
@@ -47,14 +50,55 @@ void MolecularDynamics::initializeParticles() {
             Particle({8.5, 11.3, 10.0}, {0.5, 0.0, 0.0}, 1),
             Particle({11.5, 8.7, 10.0}, {-0.5, 0.0, 0.0}, 1)
         };
-    } else {        
-        for (int i = 0; i < N; ++i) {
-            std::array<double, 3> position = {Lx * (double)(rand()) / RAND_MAX, Ly * (double)(rand()) / RAND_MAX, Lz * (double)(rand()) / RAND_MAX};
-            std::array<double, 3> velocity = {(double)(rand()) / RAND_MAX - 0.5, (double)(rand()) / RAND_MAX - 0.5, (double)(rand()) / RAND_MAX - 0.5};
-            int type = ((double)(rand()) / RAND_MAX < percent_type1 / 100.0) ? 1 : 0; // percent_type1 probability for type 1 particles
-            particles.emplace_back(position, velocity, type); // append a new particle to the particles vector with the given position, velocity, and type
+    } else {
+        int numType1 = static_cast<int>(std::ceil(percent_type1 / 100.0 * N));
+        int numType0 = N - numType1;
+
+        for (int i = 0; i < numType0; ++i) {
+            bool validPosition = false;
+            std::array<double, 3> position;
+            std::array<double, 3> velocity;
+
+            while (!validPosition) {
+                position = {Lx * (double)(rand()) / RAND_MAX, Ly * (double)(rand()) / RAND_MAX, Lz * (double)(rand()) / RAND_MAX};
+                velocity = {(double)(rand()) / RAND_MAX - 0.5, (double)(rand()) / RAND_MAX - 0.5, (double)(rand()) / RAND_MAX - 0.5};
+
+                validPosition = stabilityCheck(position);
+            }
+
+            particles.emplace_back(position, velocity, 0); // append a new type 0 particle to the particles vector with the given position, velocity, and type
+        }
+
+        for (int i = 0; i < numType1; ++i) {
+            bool validPosition = false;
+            std::array<double, 3> position;
+            std::array<double, 3> velocity;
+
+            while (!validPosition) {
+                position = {Lx * (double)(rand()) / RAND_MAX, Ly * (double)(rand()) / RAND_MAX, Lz * (double)(rand()) / RAND_MAX};
+                velocity = {(double)(rand()) / RAND_MAX - 0.5, (double)(rand()) / RAND_MAX - 0.5, (double)(rand()) / RAND_MAX - 0.5};
+
+                validPosition = stabilityCheck(position);
+            }
+
+            particles.emplace_back(position, velocity, 1); // append a new type 1 particle to the particles vector with the given position, velocity, and type
         }
     }
+}
+
+bool MolecularDynamics::stabilityCheck(const std::array<double, 3>& position) {
+    for (const Particle& p : particles) {
+        std::array<double, 3> otherPosition = p.getPosition();
+        double distanceSquared = 0.0;
+        for (int k = 0; k < 3; ++k) {
+            double diff = position[k] - otherPosition[k];
+            distanceSquared += diff * diff; // Calculates the Euclidean distance squared between the two particles
+        }
+        if (distanceSquared < 0.25) { // R = 0.5, so R^2 = 0.25
+            return false;
+        }
+    }
+    return true;
 }
 
 void MolecularDynamics::computeForces() {
@@ -65,28 +109,30 @@ void MolecularDynamics::computeForces() {
         for (size_t j = i + 1; j < particles.size(); ++j) {
             int type_i = particles[i].getType();
             int type_j = particles[j].getType();
-            double sigma2, epsilon;
+            double sigma, epsilon;
 
             if (type_i == 0 && type_j == 0) {
-                sigma2 = 1.0;
+                sigma = 1.0;
                 epsilon = 3.0;
             } else if ((type_i == 0 && type_j == 1) || (type_i == 1 && type_j == 0)) {
-                sigma2 = 4.0;
+                sigma = 2.0;
                 epsilon = 15.0;
             } else if (type_i == 1 && type_j == 1) {
-                sigma2 = 9.0;
+                sigma = 3.0;
                 epsilon = 60.0;
             }
 
             std::array<double, 3> rij;
-            double r2 = 0.0;
+            double r = 0.0;
             for (int k = 0; k < 3; ++k) {
                 rij[k] = particles[i].getPosition()[k] - particles[j].getPosition()[k];
-                r2 += rij[k] * rij[k];
+                r += rij[k];
             }
-            double r6 = r2 * r2 * r2;
-            double r12 = r6 * r6;
-            double f = 24.0 * epsilon * (2.0 * sigma2 * sigma2 * sigma2 * sigma2 * sigma2 * sigma2 / r12 - sigma2 * sigma2 * sigma2 / r6) / r2;
+
+            // double r6 = r2 * r2 * r2;
+            // double r12 = r6 * r6;
+
+            double f = 24.0 * epsilon * ( (2.0 * pow(sigma,12.0) / pow(r, 14)) - (pow(sigma,6) / pow(r,8)));
             for (int k = 0; k < 3; ++k) {
                 double forceComponent = f * rij[k];
                 std::array<double, 3> force_i = particles[i].getForce();
@@ -143,10 +189,10 @@ void MolecularDynamics::computeKineticEnergy() {
     }
 }
 
-void MolecularDynamics::setTemperature(double temp0) {
+void MolecularDynamics::setTemperature() {
     const double kb = 0.8314459920816467; // Boltzmann constant
-    temp = (2.0 / (3.0 * kb)) * kineticEnergy;
-    double lambda = std::sqrt(temp0 / temp);
+    double tempKE = (2.0 / (3.0 * kb)) * kineticEnergy;
+    const double lambda = std::sqrt(temp / tempKE);
     for (Particle& p : particles) {
         std::array<double, 3> velocity = p.getVelocity();
         for (int k = 0; k < 3; ++k) {
@@ -162,12 +208,11 @@ void MolecularDynamics::runSimulation() {
         double currentTime = step * dt;
         computeForces();
         integrate();
-        if (step % static_cast<int>(0.1 / dt) == 0) {
-            if (testCase != -1) {
-               outputParticleData(currentTime);
-            }
-            outputKineticEnergy(currentTime);
+        if (testCase != -1) {
+            setTemperature();
+            outputParticleData(currentTime);
         }
+        outputKineticEnergy(currentTime);
     }
 }
 

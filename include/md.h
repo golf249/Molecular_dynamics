@@ -14,11 +14,6 @@ class MolecularDynamics {
 public:
     MolecularDynamics(int numParticles, double dt, double Lx, double Ly, double Lz, int testCase = -1, double temp = -1.0, double percent_type1 = 10.0, double finalTime = -1.0);
     void initializeParticles();
-    void computeForces();
-    void integrate();
-    void applyBoundaryConditions();
-    void computeKineticEnergy();
-    void setTemperature(double temp);
     void runSimulation();
     void outputParticleData(double time);
     void outputKineticEnergy(double time);
@@ -33,7 +28,14 @@ private:
     double finalTime;
     double kineticEnergy;
     std::vector<Particle> particles;
-    WriteFile writeFile; // Add WriteFile member
+    WriteFile writeFile;
+
+    bool stabilityCheck(const std::array<double, 3>& position);
+    void computeForces();
+    void integrate();
+    void applyBoundaryConditions();
+    void computeKineticEnergy();
+    void setTemperature();
 };
 
 #endif // MD_H

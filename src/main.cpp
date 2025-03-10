@@ -55,8 +55,8 @@ int main(int argc, char* argv[]) {
 
     // Check that --N and --percent-type1 are provided if --ic-random is specified
     if (vm.count("ic-random")) {
-        if (!vm.count("N")) {
-            std::cerr << "Error: --N must be provided when --ic-random is specified." << std::endl;
+        if ((!vm.count("N")) || (!vm.count("T"))) {
+            std::cerr << "Error: Both --N and --T must be provided when --ic-random is specified." << std::endl;
             return 1;
         }
     }
