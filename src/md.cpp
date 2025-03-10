@@ -212,8 +212,9 @@ void MolecularDynamics::runSimulation() {
         computeForces();
         integrate();
         if (testCase != -1) {
-            setTemperature();
             outputParticleData(currentTime);
+        } else { 
+            setTemperature();
         }
         outputKineticEnergy(currentTime);
     }
