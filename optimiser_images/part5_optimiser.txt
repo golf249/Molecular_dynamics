@@ -1,0 +1,3 @@
+First iteration:
+
+We can see that pow function is very computationally expensive and it can be clearly seen in the image below in the overview of the optimiser. The total time it took was 84.809 s.

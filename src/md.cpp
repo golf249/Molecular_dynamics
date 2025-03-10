@@ -123,16 +123,19 @@ void MolecularDynamics::computeForces() {
             }
 
             std::array<double, 3> rij;
-            double r = 0.0;
+            double r2 = 0.0;
             for (int k = 0; k < 3; ++k) {
                 rij[k] = particles[i].getPosition()[k] - particles[j].getPosition()[k];
-                r += rij[k];
+                r2 += rij[k] * rij[k];
             }
 
-            // double r6 = r2 * r2 * r2;
-            // double r12 = r6 * r6;
+            double sigma2 = sigma * sigma;
+            double sigma6 = sigma2 * sigma2 * sigma2;
+            double sigma12 = sigma6 * sigma6;
+            double r6 = r2 * r2 * r2;
+            double r12 = r6 * r6;
 
-            double f = 24.0 * epsilon * ( (2.0 * pow(sigma,12.0) / pow(r, 14)) - (pow(sigma,6) / pow(r,8)));
+            double f = 24.0 * epsilon * (2.0 * sigma12 / r12 - sigma6 / r6) / r2;
             for (int k = 0; k < 3; ++k) {
                 double forceComponent = f * rij[k];
                 std::array<double, 3> force_i = particles[i].getForce();
