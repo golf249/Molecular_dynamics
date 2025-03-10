@@ -1,5 +1,7 @@
 #include "../include/Particle.h"
 
+constexpr double Properties::mass[2];
+
 Particle::Particle(const std::array<double, 3>& position, const std::array<double, 3>& velocity, int type)
     : position(position), velocity(velocity), force({0.0, 0.0, 0.0}), mass(Properties::mass[type]), type(type) {}
 

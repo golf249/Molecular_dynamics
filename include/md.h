@@ -8,6 +8,7 @@
 #include <fstream>
 #include <cstdlib>
 #include "Particle.h"
+#include "writeFile.h"
 
 class MolecularDynamics {
 public:
@@ -29,8 +30,7 @@ private:
     double percent_type1;
     double finalTime;
     std::vector<Particle> particles;
-    std::ofstream particleDataFile;
-    std::ofstream kineticEnergyFile;
+    WriteFile writeFile; // Add WriteFile member
 };
 
 #endif // MD_H

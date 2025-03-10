@@ -2,7 +2,10 @@
 CXX = g++
 
 # Compiler flags
-CXXFLAGS = -std=c++11 -Iinclude -lboost_program_options
+CXXFLAGS = -std=c++11 -Wall -O2 -Iinclude
+
+# Libraries
+LDLIBS = -lboost_program_options
 
 # Source files
 SRC = $(wildcard src/*.cpp)
@@ -11,14 +14,14 @@ SRC = $(wildcard src/*.cpp)
 OBJ = $(SRC:.cpp=.o)
 
 # Executable name
-EXEC = molecular_dynamics
+EXEC = md
 
 # Default target
 all: $(EXEC)
 
 # Link object files to create the executable
 $(EXEC): $(OBJ)
-	$(CXX) $(CXXFLAGS) -o $@ $^
+	$(CXX) $(CXXFLAGS) -o $@ $^ $(LDLIBS)
 
 # Compile source files into object files
 %.o: %.cpp
@@ -26,7 +29,7 @@ $(EXEC): $(OBJ)
 
 # Clean up build files
 clean:
-	rm -f $(OBJ) $(EXEC)
+	rm -f $(OBJ) $(EXEC) src/*.txt
 
 # Phony targets
 .PHONY: all clean

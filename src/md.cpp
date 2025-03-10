@@ -1,12 +1,8 @@
 #include "../include/md.h"
 
 MolecularDynamics::MolecularDynamics(int numParticles, double dt, double Lx, double Ly, double Lz, int testCase, double temp, double percent_type1, double finalTime)
-    : N(numParticles), dt(dt), Lx(Lx), Ly(Ly), Lz(Lz), testCase(testCase), temp(temp), percent_type1(percent_type1), finalTime(finalTime) {
+    : N(numParticles), dt(dt), Lx(Lx), Ly(Ly), Lz(Lz), testCase(testCase), temp(temp), percent_type1(percent_type1), finalTime(finalTime), writeFile("particle_data.txt", "kinetic_energy.txt") {
     initializeParticles();
-    if (testCase != -1) {
-        particleDataFile.open("particle_data.txt");
-    }
-    kineticEnergyFile.open("kinetic_energy.txt");
 
     // Set final time based on test case if not provided
     if (this->finalTime == -1.0) {
@@ -151,23 +147,14 @@ void MolecularDynamics::runSimulation() {
             outputKineticEnergy(currentTime);
         }
     }
-    // Close the files after the simulation
-    if (particleDataFile.is_open()) {
-        particleDataFile.close();
-    }
-    if (kineticEnergyFile.is_open()) {
-        kineticEnergyFile.close();
-    }
 }
 
 void MolecularDynamics::outputParticleData(double time) {
-    for (size_t i = 0; i < particles.size(); ++i) {
-        const auto& p = particles[i];
-        const auto& position = p.getPosition();
-        const auto& velocity = p.getVelocity();
-        particleDataFile << time << " " << i << " "
-                         << position[0] << " " << position[1] << " " << position[2] << " "
-                         << velocity[0] << " " << velocity[1] << " " << velocity[2] << "\n";
+    if (testCase != -1) {
+        for (size_t i = 0; i < particles.size(); ++i) {
+            const auto& p = particles[i];
+            writeFile.writeParticleData(time, i, p.getPosition(), p.getVelocity());
+        }
     }
 }
 
@@ -178,5 +165,5 @@ void MolecularDynamics::outputKineticEnergy(double time) {
         double speedSquared = velocity[0] * velocity[0] + velocity[1] * velocity[1] + velocity[2] * velocity[2];
         kineticEnergy += 0.5 * p.getMass() * speedSquared;
     }
-    kineticEnergyFile << time << " " << kineticEnergy << "\n";
+    writeFile.writeKineticEnergy(time, kineticEnergy);
 }
