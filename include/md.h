@@ -31,7 +31,6 @@ private:
     std::vector<Particle> particles;
     std::ofstream particleDataFile;
     std::ofstream kineticEnergyFile;
-    WriteFile fileHandler;
 };
 
 #endif // MD_H
