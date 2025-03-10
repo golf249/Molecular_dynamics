@@ -2,6 +2,7 @@
 #include <iostream>
 #include <cstdlib>
 #include <boost/program_options.hpp>
+#include <fstream>
 
 namespace po = boost::program_options;
 
@@ -38,13 +39,14 @@ int main(int argc, char* argv[]) {
 
     // Check that only one --ic option is provided
     int ic_count = 0;
-    if (vm.count("ic-one")) ic_count++;
-    if (vm.count("ic-one-vel")) ic_count++;
-    if (vm.count("ic-two")) ic_count++;
-    if (vm.count("ic-two-pass1")) ic_count++;
-    if (vm.count("ic-two-pass2")) ic_count++;
-    if (vm.count("ic-two-pass3")) ic_count++;
-    if (vm.count("ic-random")) ic_count++;
+    int testCase = -1;
+    if (vm.count("ic-one")) { ic_count++; testCase = 1; }
+    if (vm.count("ic-one-vel")) { ic_count++; testCase = 2; }
+    if (vm.count("ic-two")) { ic_count++; testCase = 3; }
+    if (vm.count("ic-two-pass1")) { ic_count++; testCase = 4; }
+    if (vm.count("ic-two-pass2")) { ic_count++; testCase = 5; }
+    if (vm.count("ic-two-pass3")) { ic_count++; testCase = 6; }
+    if (vm.count("ic-random")) { ic_count++; testCase = -1; }
 
     if (ic_count != 1) {
         std::cerr << "Error: Exactly one --ic option must be provided." << std::endl;
@@ -65,10 +67,8 @@ int main(int argc, char* argv[]) {
     const double dt = vm["dt"].as<double>();
     double T = vm.count("T") ? vm["T"].as<double>() : -1.0; // -1 means not set
     double temp = vm.count("temp") ? vm["temp"].as<double>() : -1.0; // -1 means not set
-    int N = vm.count("N") ? vm["N"].as<int>() : 0;
-    double percent_type1 = vm["percent-type1"].as<double>(); // Default is fine
-
-
+    int N = vm.count("N") ? vm["N"].as<int>() : -1; // -1 means not set
+    double percent_type1 = vm["percent-type1"].as<double>();
 
     // Print parsed values (for debugging)
     std::cout << "Simulation parameters:\n"
@@ -76,14 +76,19 @@ int main(int argc, char* argv[]) {
               << "Time Step: " << dt << "\n"
               << "Final Time: " << (T >= 0 ? std::to_string(T) : "Not Fixed") << "\n"
               << "Temperature: " << (temp >= 0 ? std::to_string(temp) : "Not Fixed") << "\n"
-              << "Number of Particles: " << N << "\n"
-              << "Type 1 Particle Percentage: " << percent_type1 << "%\n";
+              << "Number of Particles: " << (N >= 0 ? std::to_string(N) : "Not Fixed") << "\n"
+              << "Type 1 Particle Percentage: " << percent_type1 << "%\n"
+              << "Test Case: " << testCase << "\n";
     
-
+    if (vm.count("ic-one") || vm.count("ic-one-vel") || vm.count("ic-two") || vm.count("ic-two-pass1") || vm.count("ic-two-pass2") || vm.count("ic-two-pass3")) {
+        // Initialize and run the simulation with the specified test case
+        MolecularDynamics simulation(N, dt, Lx, Ly, Lz, testCase, temp, percent_type1, T);
+        simulation.runSimulation();
+    } else if (vm.count("ic-random")) {
+        // Initialize and run the simulation with random initial conditions
+        MolecularDynamics simulation(N, dt, Lx, Ly, Lz, -1, temp, percent_type1, T);
+        simulation.runSimulation();
+    }
 
     return 0;
 }
-
-    // Initialize and run the simulation
-    // MolecularDynamics simulation(numParticles, dt, Lx, Ly, Lz);
-    // simulation.runSimulation(steps);

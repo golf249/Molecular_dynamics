@@ -1,4 +1,3 @@
-// md.h - Molecular Dynamics Header
 #ifndef MD_H
 #define MD_H
 
@@ -6,33 +5,33 @@
 #include <array>
 #include <cmath>
 #include <iostream>
-#include <random>
-
-struct Particle {
-    std::array<double, 3> position;
-    std::array<double, 3> velocity;
-    std::array<double, 3> force;
-    double mass;
-};
+#include <fstream>
+#include <cstdlib>
+#include "Particle.h"
 
 class MolecularDynamics {
 public:
-    MolecularDynamics(int numParticles, double dt, double Lx, double Ly, double Lz);
-    void initializeRandomEngine();
+    MolecularDynamics(int numParticles, double dt, double Lx, double Ly, double Lz, int testCase = -1, double temp = -1.0, double percent_type1 = 10.0, double finalTime = -1.0);
     void initializeParticles();
     void computeForces();
     void integrate();
     void applyBoundaryConditions();
-    void runSimulation(int steps);
-    void printState(int step) const;
+    void runSimulation();
+    void outputParticleData(double time);
+    void outputKineticEnergy(double time);
 
 private:
-    int N;
-    double dt;
-    double Lx, Ly, Lz;
+    const int N;
+    const double dt;
+    const double Lx, Ly, Lz;
+    const int testCase;
+    double temp;
+    double percent_type1;
+    double finalTime;
     std::vector<Particle> particles;
-    std::mt19937 rng;
-    std::uniform_real_distribution<double> uniform_dist;
+    std::ofstream particleDataFile;
+    std::ofstream kineticEnergyFile;
+    WriteFile fileHandler;
 };
 
 #endif // MD_H

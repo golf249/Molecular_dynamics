@@ -1,40 +1,78 @@
-// md.cpp - Molecular Dynamics Implementation
-
 #include "../include/md.h"
+#include "../include/writeFile.h"
 
-MolecularDynamics::MolecularDynamics(int numParticles, double dt, double Lx, double Ly, double Lz)
-    : N(numParticles), dt(dt), Lx(Lx), Ly(Ly), Lz(Lz), uniform_dist(0.0, 1.0) {
-    initializeRandomEngine();
+MolecularDynamics::MolecularDynamics(int numParticles, double dt, double Lx, double Ly, double Lz, int testCase, double temp, double percent_type1, double finalTime)
+    : N(numParticles), dt(dt), Lx(Lx), Ly(Ly), Lz(Lz), testCase(testCase), temp(temp), percent_type1(percent_type1), finalTime(finalTime), fileHandler("particle_data.txt", "kinetic_energy.txt") {
     initializeParticles();
 }
 
-void MolecularDynamics::initializeRandomEngine() {
-    std::random_device rd;
-    rng = std::mt19937(rd());
-}
-
 void MolecularDynamics::initializeParticles() {
-    particles.resize(N);
-    for (auto& p : particles) {
-        p.position = {Lx * uniform_dist(rng), Ly * uniform_dist(rng), Lz * uniform_dist(rng)};
-        p.velocity = {uniform_dist(rng) - 0.5, uniform_dist(rng) - 0.5, uniform_dist(rng) - 0.5};
-        p.force = {0.0, 0.0, 0.0};
-        p.mass = (uniform_dist(rng) < 0.1) ? 10.0 : 1.0; // 10% probability for type 1 particles
+    particles.clear(); // Clear any existing particles
+
+    if (testCase == 1) {
+        particles = {
+            Particle({10.0, 10.0, 10.0}, {0.0, 0.0, 0.0}, 0)
+        };
+    } else if (testCase == 2) {
+        particles = {
+            Particle({10.0, 10.0, 10.0}, {5.0, 2.0, 1.0}, 0)
+        };
+    } else if (testCase == 3) {
+        particles = {
+            Particle({8.5, 10.0, 10.0}, {0.0, 0.0, 0.0}, 0),
+            Particle({11.5, 10.0, 10.0}, {0.0, 0.0, 0.0}, 0)
+        };
+    } else if (testCase == 4) {
+        particles = {
+            Particle({8.5, 11.5, 10.0}, {0.5, 0.0, 0.0}, 0),
+            Particle({11.5, 8.5, 10.0}, {-0.5, 0.0, 0.0}, 0)
+        };
+    } else if (testCase == 5) {
+        particles = {
+            Particle({8.5, 11.3, 10.0}, {0.5, 0.0, 0.0}, 0),
+            Particle({11.5, 8.7, 10.0}, {-0.5, 0.0, 0.0}, 0)
+        };
+    } else if (testCase == 6) {
+        particles = {
+            Particle({8.5, 11.3, 10.0}, {0.5, 0.0, 0.0}, 1),
+            Particle({11.5, 8.7, 10.0}, {-0.5, 0.0, 0.0}, 1)
+        };
+    } else {
+        particles.clear();
+        for (int i = 0; i < N; ++i) {
+            std::array<double, 3> position = {Lx * (double)(rand()) / RAND_MAX, Ly * (double)(rand()) / RAND_MAX, Lz * (double)(rand()) / RAND_MAX};
+            std::array<double, 3> velocity = {(double)(rand()) / RAND_MAX - 0.5, (double)(rand()) / RAND_MAX - 0.5, (double)(rand()) / RAND_MAX - 0.5};
+            int type = ((double)(rand()) / RAND_MAX < percent_type1 / 100.0) ? 1 : 0; // percent_type1 probability for type 1 particles
+            particles.emplace_back(position, velocity, type);
+        }
     }
 }
 
 void MolecularDynamics::computeForces() {
-    const double sigma = 1.0;
-    const double epsilon = 3.0;
     for (auto& p : particles) {
-        p.force = {0.0, 0.0, 0.0};
+        p.setForce({0.0, 0.0, 0.0});
     }
     for (size_t i = 0; i < particles.size(); ++i) {
         for (size_t j = i + 1; j < particles.size(); ++j) {
+            int type_i = particles[i].getType();
+            int type_j = particles[j].getType();
+            double sigma, epsilon;
+
+            if (type_i == 0 && type_j == 0) {
+                sigma = 1.0;
+                epsilon = 3.0;
+            } else if ((type_i == 0 && type_j == 1) || (type_i == 1 && type_j == 0)) {
+                sigma = 2.0;
+                epsilon = 15.0;
+            } else if (type_i == 1 && type_j == 1) {
+                sigma = 3.0;
+                epsilon = 60.0;
+            }
+
             std::array<double, 3> rij;
             double r2 = 0.0;
             for (int k = 0; k < 3; ++k) {
-                rij[k] = particles[j].position[k] - particles[i].position[k];
+                rij[k] = particles[j].getPosition()[k] - particles[i].getPosition()[k];
                 r2 += rij[k] * rij[k];
             }
             double r6 = r2 * r2 * r2;
@@ -42,8 +80,12 @@ void MolecularDynamics::computeForces() {
             double f = 24 * epsilon * (2 * sigma * sigma * sigma * sigma * sigma * sigma / r12 - sigma * sigma * sigma / r6) / r2;
             for (int k = 0; k < 3; ++k) {
                 double forceComponent = f * rij[k];
-                particles[i].force[k] += forceComponent;
-                particles[j].force[k] -= forceComponent;
+                std::array<double, 3> force_i = particles[i].getForce();
+                std::array<double, 3> force_j = particles[j].getForce();
+                force_i[k] += forceComponent;
+                force_j[k] -= forceComponent;
+                particles[i].setForce(force_i);
+                particles[j].setForce(force_j);
             }
         }
     }
@@ -51,40 +93,64 @@ void MolecularDynamics::computeForces() {
 
 void MolecularDynamics::integrate() {
     for (auto& p : particles) {
+        std::array<double, 3> velocity = p.getVelocity();
+        std::array<double, 3> position = p.getPosition();
+        std::array<double, 3> force = p.getForce();
+        double mass = p.getMass();
         for (int k = 0; k < 3; ++k) {
-            p.velocity[k] += dt * p.force[k] / p.mass;
-            p.position[k] += dt * p.velocity[k];
+            velocity[k] += dt * force[k] / mass;
+            position[k] += dt * velocity[k];
         }
+        p.setVelocity(velocity);
+        p.setPosition(position);
     }
     applyBoundaryConditions();
 }
 
 void MolecularDynamics::applyBoundaryConditions() {
     for (auto& p : particles) {
+        std::array<double, 3> position = p.getPosition();
+        std::array<double, 3> velocity = p.getVelocity();
         for (int k = 0; k < 3; ++k) {
-            if (p.position[k] < 0) {
-                p.position[k] = -p.position[k];
-                p.velocity[k] = std::abs(p.velocity[k]);
-            } else if (p.position[k] > ((k == 0) ? Lx : (k == 1) ? Ly : Lz)) {
-                p.position[k] = 2 * ((k == 0) ? Lx : (k == 1) ? Ly : Lz) - p.position[k];
-                p.velocity[k] = -std::abs(p.velocity[k]);
+            if (position[k] < 0) {
+                position[k] = -position[k];
+                velocity[k] = std::abs(velocity[k]);
+            } else if (position[k] > ((k == 0) ? Lx : (k == 1) ? Ly : Lz)) {
+                position[k] = 2 * ((k == 0) ? Lx : (k == 1) ? Ly : Lz) - position[k];
+                velocity[k] = -std::abs(velocity[k]);
             }
+        }
+        p.setPosition(position);
+        p.setVelocity(velocity);
+    }
+}
+
+void MolecularDynamics::runSimulation() {
+    int steps = static_cast<int>(finalTime / dt);
+    for (int step = 0; step <= steps; ++step) {
+        double currentTime = step * dt;
+        computeForces();
+        integrate();
+        if (step % static_cast<int>(0.1 / dt) == 0) {
+            outputParticleData(currentTime);
+            outputKineticEnergy(currentTime);
         }
     }
 }
 
-void MolecularDynamics::runSimulation(int steps) {
-    for (int step = 0; step < steps; ++step) {
-        computeForces();
-        integrate();
-        if (step % 10 == 0) printState(step);
+void MolecularDynamics::outputParticleData(double time) {
+    for (size_t i = 0; i < particles.size(); ++i) {
+        const auto& p = particles[i];
+        fileHandler.writeParticleData(time, i, p.getPosition(), p.getVelocity());
     }
 }
 
-void MolecularDynamics::printState(int step) const {
-    std::cout << "Step " << step << ":\n";
+void MolecularDynamics::outputKineticEnergy(double time) {
+    double kineticEnergy = 0.0;
     for (const auto& p : particles) {
-        std::cout << "Position: (" << p.position[0] << ", " << p.position[1] << ", " << p.position[2] << ") ";
-        std::cout << "Velocity: (" << p.velocity[0] << ", " << p.velocity[1] << ", " << p.velocity[2] << ")\n";
+        const auto& velocity = p.getVelocity();
+        double speedSquared = velocity[0] * velocity[0] + velocity[1] * velocity[1] + velocity[2] * velocity[2];
+        kineticEnergy += 0.5 * p.getMass() * speedSquared;
     }
+    fileHandler.writeKineticEnergy(time, kineticEnergy);
 }
