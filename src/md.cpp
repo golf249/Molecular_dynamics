@@ -111,16 +111,16 @@ void MolecularDynamics::computeForces() {
         for (size_t j = i + 1; j < particles.size(); ++j) {
             int type_i = particles[i].getType();
             int type_j = particles[j].getType();
-            double sigma, epsilon;
+            double sigma2, epsilon;
 
             if (type_i == 0 && type_j == 0) {
-                sigma = 1.0;
+                sigma2 = 1.0;
                 epsilon = 3.0;
             } else if ((type_i == 0 && type_j == 1) || (type_i == 1 && type_j == 0)) {
-                sigma = 2.0;
+                sigma2 = 4.0;
                 epsilon = 15.0;
             } else if (type_i == 1 && type_j == 1) {
-                sigma = 3.0;
+                sigma2 = 9.0;
                 epsilon = 60.0;
             }
 
@@ -131,9 +131,12 @@ void MolecularDynamics::computeForces() {
                 r2 += rij[k] * rij[k];
             }
 
-            double r = std::sqrt(r2);
-            double f = 24.0 * epsilon * ( (2.0 * pow(sigma, 12.0) / pow(r, 14.0)) - (pow(sigma, 6.0) / pow(r, 8.0)));
+            double sigma6 = sigma2 * sigma2 * sigma2;
+            double sigma12 = sigma6 * sigma6;
+            double r6 = r2 * r2 * r2;
+            double r12 = r6 * r6;
 
+            double f = 24.0 * epsilon * (2.0 * sigma12 / r12 - sigma6 / r6) / r2;
             for (int k = 0; k < 3; ++k) {
                 double forceComponent = f * rij[k];
                 std::array<double, 3> force_i = particles[i].getForce();
@@ -219,7 +222,6 @@ void MolecularDynamics::runSimulation() {
         if (testCase != -1) {
             outputParticleData(currentTime);
         }
-        outputParticleData(currentTime);
         outputKineticEnergy(currentTime);
     }
 }
