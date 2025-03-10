@@ -1,7 +1,7 @@
 clear,clc, close all;
 
 % Read the data from the file
-data = readtable('src/particle_data.txt', 'Delimiter', ' ', 'ReadVariableNames', false);
+data = readtable('particle_data.txt', 'Delimiter', ' ', 'ReadVariableNames', false);
 
 % Assign column names for easier access
 data.Properties.VariableNames = {'Time', 'ParticleID', 'X', 'Y', 'Z', 'U', 'V', 'W'};

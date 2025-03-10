@@ -134,6 +134,28 @@ void MolecularDynamics::applyBoundaryConditions() {
     }
 }
 
+void MolecularDynamics::computeKineticEnergy() {
+    kineticEnergy = 0.0;
+    for (const Particle& p : particles) {
+        const std::array<double, 3>& velocity = p.getVelocity();
+        double speedSquared = velocity[0] * velocity[0] + velocity[1] * velocity[1] + velocity[2] * velocity[2];
+        kineticEnergy += 0.5 * p.getMass() * speedSquared;
+    }
+}
+
+void MolecularDynamics::setTemperature(double temp0) {
+    const double kb = 0.8314459920816467; // Boltzmann constant
+    temp = (2.0 / (3.0 * kb)) * kineticEnergy;
+    double lambda = std::sqrt(temp0 / temp);
+    for (Particle& p : particles) {
+        std::array<double, 3> velocity = p.getVelocity();
+        for (int k = 0; k < 3; ++k) {
+            velocity[k] *= lambda;
+        }
+        p.setVelocity(velocity);
+    }
+}
+
 void MolecularDynamics::runSimulation() {
     int steps = static_cast<int>(finalTime / dt);
     for (int step = 0; step <= steps; ++step) {
@@ -142,7 +164,7 @@ void MolecularDynamics::runSimulation() {
         integrate();
         if (step % static_cast<int>(0.1 / dt) == 0) {
             if (testCase != -1) {
-                outputParticleData(currentTime);
+               outputParticleData(currentTime);
             }
             outputKineticEnergy(currentTime);
         }
@@ -150,20 +172,13 @@ void MolecularDynamics::runSimulation() {
 }
 
 void MolecularDynamics::outputParticleData(double time) {
-    if (testCase != -1) {
-        for (size_t i = 0; i < particles.size(); ++i) {
-            const auto& p = particles[i];
-            writeFile.writeParticleData(time, i, p.getPosition(), p.getVelocity());
-        }
+    for (size_t i = 0; i < particles.size(); ++i) {
+        const auto& p = particles[i];
+        writeFile.writeParticleData(time, i, p.getPosition(), p.getVelocity());
     }
 }
 
 void MolecularDynamics::outputKineticEnergy(double time) {
-    double kineticEnergy = 0.0;
-    for (const auto& p : particles) {
-        const auto& velocity = p.getVelocity();
-        double speedSquared = velocity[0] * velocity[0] + velocity[1] * velocity[1] + velocity[2] * velocity[2];
-        kineticEnergy += 0.5 * p.getMass() * speedSquared;
-    }
+    computeKineticEnergy();
     writeFile.writeKineticEnergy(time, kineticEnergy);
 }

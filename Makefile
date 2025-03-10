@@ -2,7 +2,7 @@
 CXX = g++
 
 # Compiler flags
-CXXFLAGS = -std=c++11 -Wall -O2 -Iinclude
+CXXFLAGS = -std=c++11 -Wall -O0 -Iinclude
 
 # Libraries
 LDLIBS = -lboost_program_options
@@ -29,7 +29,7 @@ $(EXEC): $(OBJ)
 
 # Clean up build files
 clean:
-	rm -f $(OBJ) $(EXEC) src/*.txt
+	rm -f $(OBJ) $(EXEC) *.txt
 
 # Phony targets
 .PHONY: all clean
