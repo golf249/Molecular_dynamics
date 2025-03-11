@@ -53,15 +53,15 @@ void MolecularDynamics::initializeParticles() {
     } else {
         int numType1 = static_cast<int>(std::ceil(percent_type1 / 100.0 * N));
         int numType0 = N - numType1;
+        const double invRand = 1.0 / RAND_MAX;
 
         for (int i = 0; i < numType0; ++i) {
             bool validPosition = false;
-            std::array<double, 3> position;
-            std::array<double, 3> velocity;
+            std::array<double, 3> position, velocity;
 
             while (!validPosition) {
-                position = {Lx * (double)(rand()) / RAND_MAX, Ly * (double)(rand()) / RAND_MAX, Lz * (double)(rand()) / RAND_MAX};
-                velocity = {(double)(rand()) / RAND_MAX - 0.5, (double)(rand()) / RAND_MAX - 0.5, (double)(rand()) / RAND_MAX - 0.5};
+                position = { Lx * ((double)rand() * invRand), Ly * ((double)rand() * invRand), Lz * ((double)rand() * invRand) };
+                velocity = { ((double)rand() * invRand - 0.5), ((double)rand() * invRand - 0.5), ((double)rand() * invRand - 0.5) };
 
                 validPosition = stabilityCheck(position);
             }
@@ -71,8 +71,7 @@ void MolecularDynamics::initializeParticles() {
 
         for (int i = 0; i < numType1; ++i) {
             bool validPosition = false;
-            std::array<double, 3> position;
-            std::array<double, 3> velocity;
+            std::array<double, 3> position, velocity;
 
             while (!validPosition) {
                 position = {Lx * (double)(rand()) / RAND_MAX, Ly * (double)(rand()) / RAND_MAX, Lz * (double)(rand()) / RAND_MAX};
@@ -87,74 +86,85 @@ void MolecularDynamics::initializeParticles() {
 }
 
 bool MolecularDynamics::stabilityCheck(const std::array<double, 3>& position) {
+    constexpr double minDist2 = 0.25; // Minimum allowed distance squared (0.5^2) {
     for (const Particle& p : particles) {
-        std::array<double, 3> otherPosition = p.getPosition();
-        double distanceSquared = 0.0;
-        for (int k = 0; k < 3; ++k) {
-            double diff = position[k] - otherPosition[k];
-            distanceSquared += diff * diff; // Calculates the Euclidean distance squared between the two particles
-        }
-        if (distanceSquared < 0.25) { // R = 0.5, so R^2 = 0.25
+        const std::array<double, 3> otherPosition = p.getPosition();
+        double dx = position[0] - otherPosition[0];
+        double dy = position[1] - otherPosition[1];
+        double dz = position[2] - otherPosition[2];
+        if ((dx*dx + dy*dy + dz*dz) < minDist2) {
             return false;
         }
     }
     return true;
 }
 
-void MolecularDynamics::computeForces() {
+void MolecularDynamics::calForces() {
+    // Clear forces first
     for (auto& p : particles) {
         p.setForce({0.0, 0.0, 0.0});
     }
-    for (size_t i = 0; i < particles.size(); ++i) {
-        for (size_t j = i + 1; j < particles.size(); ++j) {
-            int type_i = particles[i].getType();
-            int type_j = particles[j].getType();
-            double sigma, epsilon;
 
-            if (type_i == 0 && type_j == 0) {
-                sigma = 1.0;
-                epsilon = 3.0;
-            } else if ((type_i == 0 && type_j == 1) || (type_i == 1 && type_j == 0)) {
-                sigma = 2.0;
-                epsilon = 15.0;
-            } else if (type_i == 1 && type_j == 1) {
-                sigma = 3.0;
-                epsilon = 60.0;
-            }
+    // Use lookup tables for interaction parameters
+    static constexpr double sigma2_table[2][2] = {
+        {1.0, 4.0},
+        {4.0, 9.0}
+    };
+    static constexpr double epsilon_table[2][2] = {
+        {3.0, 15.0},
+        {15.0, 60.0}
+    };
 
-            std::array<double, 3> rij;
-            double r2 = 0.0;
-            for (int k = 0; k < 3; ++k) {
-                rij[k] = particles[i].getPosition()[k] - particles[j].getPosition()[k];
-                r2 += rij[k] * rij[k];
-            }
+    const size_t n = particles.size();
+    for (size_t i = 0; i < n; ++i) {
+        // Cache particle i position and type to reduce repeated lookups
+        const auto& pos_i = particles[i].getPosition();
+        const int type_i = particles[i].getType();
+        auto& force_i = particles[i].getForce();
 
-            double sigma2 = sigma * sigma;
-            double sigma6 = sigma2 * sigma2 * sigma2;
-            double sigma12 = sigma6 * sigma6;
-            double r6 = r2 * r2 * r2;
-            double r12 = r6 * r6;
+        for (size_t j = i + 1; j < n; ++j) {
+            // Cache particle j position and type
+            const auto& pos_j = particles[j].getPosition();
+            const int type_j = particles[j].getType();
+            auto& force_j = particles[j].getForce();
 
-            double f = 24.0 * epsilon * (2.0 * sigma12 / r12 - sigma6 / r6) / r2;
-            for (int k = 0; k < 3; ++k) {
-                double forceComponent = f * rij[k];
-                std::array<double, 3> force_i = particles[i].getForce();
-                std::array<double, 3> force_j = particles[j].getForce();
-                force_i[k] += forceComponent;
-                force_j[k] -= forceComponent;
-                particles[i].setForce(force_i);
-                particles[j].setForce(force_j);
-            }
+            // Get sigma2 and epsilon from lookup table
+            const double sigma2 = sigma2_table[type_i][type_j];
+            const double epsilon = epsilon_table[type_i][type_j];
+
+            // Compute the vector between particles and squared distance
+            const double dx = pos_i[0] - pos_j[0];
+            const double dy = pos_i[1] - pos_j[1];
+            const double dz = pos_i[2] - pos_j[2];
+            const double r2 = dx*dx + dy*dy + dz*dz;
+
+            // Calculate required powers
+            const double sigma6 = sigma2 * sigma2 * sigma2;
+            const double sigma12 = sigma6 * sigma6;
+            const double inv_r2 = 1.0 / r2;
+            const double inv_r6 = inv_r2 * inv_r2 * inv_r2;
+            const double inv_r12 = inv_r6 * inv_r6;
+
+            // Compute magnitude of the force
+            const double f = 24.0 * epsilon * inv_r2 * (2.0 * sigma12 * inv_r12 - sigma6 * inv_r6);
+
+            // Update forces along each component
+            force_i[0] += f * dx;
+            force_i[1] += f * dy;
+            force_i[2] += f * dz;
+            force_j[0] -= f * dx;
+            force_j[1] -= f * dy;
+            force_j[2] -= f * dz;
         }
     }
 }
 
-void MolecularDynamics::integrate() {
+void MolecularDynamics::forwardEuler() {
     for (Particle& p : particles) {
         std::array<double, 3> velocity = p.getVelocity();
         std::array<double, 3> position = p.getPosition();
-        std::array<double, 3> force = p.getForce();
-        double mass = p.getMass();
+        const std::array<double, 3> force = p.getForce();
+        const double mass = p.getMass();
         for (int k = 0; k < 3; ++k) {
             velocity[k] += dt * force[k] / mass;
             position[k] += dt * velocity[k];
@@ -162,19 +172,22 @@ void MolecularDynamics::integrate() {
         p.setVelocity(velocity);
         p.setPosition(position);
     }
-    applyBoundaryConditions();
+    bcCheck();
 }
 
-void MolecularDynamics::applyBoundaryConditions() {
+void MolecularDynamics::bcCheck() {
+    // Reflect particles if they go out of bounds
     for (Particle& p : particles) {
         std::array<double, 3> position = p.getPosition();
         std::array<double, 3> velocity = p.getVelocity();
+        // For each coordinate: 0->Lx, 1->Ly, 2->Lz
         for (int k = 0; k < 3; ++k) {
+            double L = (k == 0) ? Lx : ((k == 1) ? Ly : Lz); // Select the correct bound size for each axis
             if (position[k] < 0) {
                 position[k] = -position[k];
                 velocity[k] = std::abs(velocity[k]);
-            } else if (position[k] > ((k == 0) ? Lx : (k == 1) ? Ly : Lz)) {
-                position[k] = 2 * ((k == 0) ? Lx : (k == 1) ? Ly : Lz) - position[k];
+            } else if (position[k] > L) {
+                position[k] = 2 * L - position[k];
                 velocity[k] = -std::abs(velocity[k]);
             }
         }
@@ -183,7 +196,19 @@ void MolecularDynamics::applyBoundaryConditions() {
     }
 }
 
-void MolecularDynamics::computeKineticEnergy() {
+/**
+ * @brief Calculates the total kinetic energy of the system.
+ *
+ * This function iterates over all particles in the system, retrieves their
+ * velocities, and computes the kinetic energy using the formula:
+ * 
+ *     KE = 0.5 * mass * (velocity_x^2 + velocity_y^2 + velocity_z^2)
+ * 
+ * The total kinetic energy is then accumulated and stored in the member
+ * variable `kineticEnergy`.
+ */
+void MolecularDynamics::calKE() {
+
     kineticEnergy = 0.0;
     for (const Particle& p : particles) {
         const std::array<double, 3>& velocity = p.getVelocity();
@@ -193,9 +218,15 @@ void MolecularDynamics::computeKineticEnergy() {
 }
 
 void MolecularDynamics::velRescale() {
-    const double kb = 0.8314459920816467; // Boltzmann constant
+    // check if temp is not set else continue
+    if (temp == -1.0) {
+        return;
+    }
+
+    constexpr double kb = 0.8314459920816467; // Boltzmann constant
     double tempKE = (2.0 / (3.0 * kb)) * kineticEnergy;
     const double lambda = std::sqrt(temp / tempKE);
+
     for (Particle& p : particles) {
         std::array<double, 3> velocity = p.getVelocity();
         for (int k = 0; k < 3; ++k) {
@@ -206,16 +237,22 @@ void MolecularDynamics::velRescale() {
 }
 
 void MolecularDynamics::runSimulation() {
-    int steps = static_cast<int>(finalTime / dt);
+    const double outputTime = 0.1;
+    const int steps = static_cast<int>(finalTime / dt);
+    const int outputStep = static_cast<int>(outputTime / dt);
+
     for (int step = 0; step <= steps; ++step) {
-        double currentTime = step * dt;
-        computeForces();
-        integrate();
-        if (testCase != -1) {
-            velRescale();
-            outputParticleData(currentTime);
+        const double currentTime = step * dt;
+        calKE();
+        if (testCase == -1) velRescale();
+        calForces();
+        forwardEuler();
+        if (step % outputStep == 0) {
+            if (testCase != -1) {
+                outputParticleData(currentTime);
+            } 
+            outputKineticEnergy(currentTime);
         }
-        outputKineticEnergy(currentTime);
     }
 }
 
@@ -227,6 +264,5 @@ void MolecularDynamics::outputParticleData(double time) {
 }
 
 void MolecularDynamics::outputKineticEnergy(double time) {
-    MolecularDynamics::computeKineticEnergy();
     writeFile.writeKineticEnergy(time, kineticEnergy);
 }

@@ -33,10 +33,10 @@ private:
     WriteFile writeFile;
 
     bool stabilityCheck(const std::array<double, 3>& position);
-    void computeForces();
-    void integrate();
-    void applyBoundaryConditions();
-    void computeKineticEnergy();
+    void calForces();
+    void forwardEuler();
+    void bcCheck();
+    void calKE();
     void velRescale();
 };
 

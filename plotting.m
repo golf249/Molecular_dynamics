@@ -58,6 +58,8 @@ if exist(particleDataFile, 'file') == 2 && dir(particleDataFile).bytes > 0
     ylabel('Y');
     zlabel('Z');
     title('Particle Trajectories');
+    ylim([0, 20]);
+    xlim([0, 20]);
 
     % Plot the trajectory of each particle
     for i = 1:length(particles)
