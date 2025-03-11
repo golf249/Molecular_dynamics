@@ -17,6 +17,8 @@ public:
     void runSimulation();
     void outputParticleData(double time);
     void outputKineticEnergy(double time);
+    std::vector<Particle> getParticles() const { return particles; }
+    double getKineticEnergy() const { return kineticEnergy; }
 
 private:
     const int N;
@@ -35,7 +37,7 @@ private:
     void integrate();
     void applyBoundaryConditions();
     void computeKineticEnergy();
-    void setTemperature();
+    void velRescale();
 };
 
 #endif // MD_H

@@ -31,6 +31,25 @@ if exist(particleDataFile, 'file') == 2 && dir(particleDataFile).bytes > 0
         particles(i).W = particleData.W;
     end
 
+    % Calculate minimum separation (only for 2 particles)
+    if length(particleIDs) == 2
+        % Calculate separation at each timestep
+        dx = particles(1).X - particles(2).X;
+        dy = particles(1).Y - particles(2).Y;
+        dz = particles(1).Z - particles(2).Z;
+        
+        % Calculate distance
+        distances = sqrt(dx.^2 + dy.^2 + dz.^2);
+        
+        % Find minimum separation and its time
+        [min_separation, min_idx] = min(distances);
+        time_of_min = particles(1).Time(min_idx);
+        
+        % Display results
+        fprintf('Minimum separation between particles: %.6f\n', min_separation);
+        fprintf('Time of minimum separation: %.6f\n', time_of_min);
+    end
+
     % Create a 3D plot for the trajectories
     figure;
     hold on;
