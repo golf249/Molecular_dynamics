@@ -237,20 +237,30 @@ void MolecularDynamics::velRescale() {
 }
 
 void MolecularDynamics::runSimulation() {
+    // Compute initial kinetic energy
+    calKE();
+    
+    // Output initial conditions before starting integration
+    outputParticleData(0);
+    outputKineticEnergy(0);
+
     const double outputTime = 0.1;
     const int steps = static_cast<int>(finalTime / dt);
     const int outputStep = static_cast<int>(outputTime / dt);
 
-    for (int step = 0; step <= steps; ++step) {
+    // Start simulation from step 1
+    for (int step = 1; step <= steps; ++step) {
         const double currentTime = step * dt;
         calKE();
-        if (testCase == -1) velRescale();
+        if (testCase == -1) 
+            velRescale();
         calForces();
         forwardEuler();
+
         if (step % outputStep == 0) {
             if (testCase != -1) {
                 outputParticleData(currentTime);
-            } 
+            }
             outputKineticEnergy(currentTime);
         }
     }

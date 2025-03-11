@@ -69,6 +69,24 @@ if exist(particleDataFile, 'file') == 2 && dir(particleDataFile).bytes > 0
     % Add a legend
     legend('show');
     hold off;
+
+    % Create a new figure for positions vs time
+    figure;
+    hold on;
+    grid on;
+    xlabel('Time');
+    ylabel('Position');
+    title('Particle Positions vs Time');
+
+    % Plot each coordinate for each particle
+    for i = 1:length(particles)
+        plot(particles(i).Time, particles(i).X, '-o', 'DisplayName', ['Particle ' num2str(particles(i).ID) ' - X']);
+        plot(particles(i).Time, particles(i).Y, '-s', 'DisplayName', ['Particle ' num2str(particles(i).ID) ' - Y']);
+        plot(particles(i).Time, particles(i).Z, '-^', 'DisplayName', ['Particle ' num2str(particles(i).ID) ' - Z']);
+    end
+
+    legend('show');
+    hold off;
 else
     disp('The particle_data.txt file is empty or does not exist. No particle trajectories to plot.');
 end
