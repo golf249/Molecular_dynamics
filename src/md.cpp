@@ -160,9 +160,98 @@ void MolecularDynamics::calForces() {
     }
 };
 
-void MolecularDynamics::calForcesParallel() {
-    // Clear forces first 
+// void MolecularDynamics::calForcesParallelOptimized() {
+//     const size_t n = particles.size();
 
+//     // Clear forces globally.
+//     for (size_t i = 0; i < n; ++i) {
+//         particles[i].setForce({0.0, 0.0, 0.0});
+//     }
+
+//     // Determine number of threads.
+//     int num_threads = 1;
+// #ifdef _OPENMP
+//     num_threads = omp_get_max_threads();
+// #endif
+
+//     // threadForces[tid][i] will store local force for particle i computed by thread tid
+//     std::vector<std::vector<std::array<double, 3>>> threadForces(num_threads, 
+//         std::vector<std::array<double, 3>>(n, {0.0, 0.0, 0.0}));
+
+//     // Use lookup tables for interaction parameters.
+//     static constexpr double sigma2_table[2][2] = {
+//         {1.0, 4.0},
+//         {4.0, 9.0}
+//     };
+//     static constexpr double epsilon_table[2][2] = {
+//         {3.0, 15.0},
+//         {15.0, 60.0}
+//     };
+
+// #ifdef _OPENMP
+//     #pragma omp parallel
+// #endif
+//     {
+//         int tid = 0;
+// #ifdef _OPENMP
+//         tid = omp_get_thread_num();
+// #endif
+// #ifdef _OPENMP
+//         #pragma omp for schedule(dynamic)
+// #endif
+//         for (size_t i = 0; i < n; ++i) {
+//             const auto& pos_i = particles[i].getPosition();
+//             const int type_i = particles[i].getType();
+//             for (size_t j = i + 1; j < n; ++j) {
+//                 const auto& pos_j = particles[j].getPosition();
+//                 const int type_j = particles[j].getType();
+                
+//                 // Compute the vector and distance
+//                 const double dx = pos_i[0] - pos_j[0];
+//                 const double dy = pos_i[1] - pos_j[1];
+//                 const double dz = pos_i[2] - pos_j[2];
+//                 const double r2 = dx * dx + dy * dy + dz * dz;
+                
+//                 // Lookup parameters.
+//                 const double sigma2 = sigma2_table[type_i][type_j];
+//                 const double epsilon = epsilon_table[type_i][type_j];
+                
+//                 // Calculate powers.
+//                 const double sigma6 = sigma2 * sigma2 * sigma2;
+//                 const double sigma12 = sigma6 * sigma6;
+//                 const double inv_r2 = 1.0 / r2;
+//                 const double inv_r6 = inv_r2 * inv_r2 * inv_r2;
+//                 const double inv_r12 = inv_r6 * inv_r6;
+                
+//                 // Compute magnitude of force.
+//                 const double f = 24.0 * epsilon * inv_r2 * (2.0 * sigma12 * inv_r12 - sigma6 * inv_r6);
+                
+//                 // Accumulate contributions into the thread-local arrays.
+//                 threadForces[tid][i][0] += f * dx;
+//                 threadForces[tid][i][1] += f * dy;
+//                 threadForces[tid][i][2] += f * dz;
+                
+//                 threadForces[tid][j][0] -= f * dx;
+//                 threadForces[tid][j][1] -= f * dy;
+//                 threadForces[tid][j][2] -= f * dz;
+//             }
+//         }
+//     } // End parallel region
+
+//     // Combine the thread-local force accumulations into the particles’ force.
+//     for (size_t i = 0; i < n; ++i) {
+//         std::array<double, 3> combined = {0.0, 0.0, 0.0};
+//         for (int tid = 0; tid < num_threads; ++tid) {
+//             combined[0] += threadForces[tid][i][0];
+//             combined[1] += threadForces[tid][i][1];
+//             combined[2] += threadForces[tid][i][2];
+//         }
+//         particles[i].setForce(combined);
+//     }
+// }
+
+void MolecularDynamics::calForcesParallel() {
+    // Clear forces first (serially)
     for (size_t i = 0; i < particles.size(); ++i) {
         particles[i].setForce({0.0, 0.0, 0.0});
     }
@@ -178,8 +267,10 @@ void MolecularDynamics::calForcesParallel() {
     };
 
     const size_t n = particles.size();
-    // Parallelize the outer loop using OpenMP; use dynamic scheduling for load balance.
+    // Guard the OpenMP directive so it’s only applied if _OPENMP is defined.
+    #ifdef _OPENMP
     #pragma omp parallel for schedule(dynamic)
+    #endif
     for (size_t i = 0; i < n; ++i) {
         // Cache particle i position and type
         const auto& pos_i = particles[i].getPosition();
@@ -217,12 +308,18 @@ void MolecularDynamics::calForcesParallel() {
             force_i[1] += f * dy;
             force_i[2] += f * dz;
             
-            // For particle j, use atomic updates since multiple threads may update the same particle.
+            // For particle j, update atomically if OpenMP is enabled.
+            #ifdef _OPENMP
             #pragma omp atomic
+            #endif
             force_j[0] -= f * dx;
+            #ifdef _OPENMP
             #pragma omp atomic
+            #endif
             force_j[1] -= f * dy;
+            #ifdef _OPENMP
             #pragma omp atomic
+            #endif
             force_j[2] -= f * dz;
         }
     }
@@ -321,9 +418,15 @@ void MolecularDynamics::runSimulation() {
     for (int step = 1; step <= steps; ++step) {
         const double currentTime = step * dt;
         calKE();
+
+        // Use a preprocessor macro to determine which implementation of calForces to use (serial/ OpenMP / CUDA)
         if (testCase == -1) 
             velRescale();
-        calForcesParallel();
+        #ifdef PARALLEL_FORCES
+            calForcesParallel();
+        #else
+            calForces();
+        #endif
         forwardEuler();
 
         if (step % outputStep == 0) {

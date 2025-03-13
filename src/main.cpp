@@ -3,6 +3,7 @@
 #include <cstdlib>
 #include <boost/program_options.hpp>
 #include <fstream>
+#include <chrono> 
 
 namespace po = boost::program_options;
 
@@ -37,7 +38,15 @@ int main(int argc, char* argv[]) {
         return 0;
     }
 
-    // Check that only one --ic option is provided
+    // Check if the user provided any IC option:
+    if (!(vm.count("ic-one") || vm.count("ic-one-vel") || vm.count("ic-two") ||
+    vm.count("ic-two-pass1") || vm.count("ic-two-pass2") || vm.count("ic-two-pass3") ||
+    vm.count("ic-random"))) {
+    std::cerr << "Error: No initial condition (--ic option) provided." << std::endl;
+    return 1;
+    }
+
+    // Check that only one --ic option is provided by incrementing ic_count
     int ic_count = 0;
     int testCase = -1;
     if (vm.count("ic-one")) { ic_count++; testCase = 1; }
@@ -48,9 +57,17 @@ int main(int argc, char* argv[]) {
     if (vm.count("ic-two-pass3")) { ic_count++; testCase = 6; }
     if (vm.count("ic-random")) { ic_count++; testCase = -1; }
 
-    if (ic_count != 1) {
+    // Check that exactly one --ic option is provided
+    if ((ic_count != 1) && (!vm.count("T"))) {
         std::cerr << "Error: Exactly one --ic option must be provided." << std::endl;
         return 1;
+    }
+
+    // Check that --T is provided for the "ic-" test cases
+    if (testCase == 1 || testCase == 2 || testCase == 3 || testCase == 4 || testCase == 5 || testCase == 6) {
+        if (!vm.count("T")) {
+            std::cerr << "Error: --T (Final time) must be provided for the \"ic-\" test case." << std::endl;            return 1;
+        }
     }
 
     // Check that --N and --percent-type1 are provided if --ic-random is specified
@@ -70,7 +87,7 @@ int main(int argc, char* argv[]) {
     int N = vm.count("N") ? vm["N"].as<int>() : -1; // -1 means not set
     double percent_type1 = vm["percent-type1"].as<double>();
 
-    // Print parsed values (for debugging)
+    // Print parsed values
     std::cout << "Simulation parameters:\n"
               << "Box Size: (" << Lx << ", " << Ly << ", " << Lz << ")\n"
               << "Time Step: " << dt << "\n"
@@ -78,16 +95,40 @@ int main(int argc, char* argv[]) {
               << "Temperature: " << (temp >= 0 ? std::to_string(temp) : "Not Fixed") << "\n"
               << "Number of Particles: " << (N >= 0 ? std::to_string(N) : "Not Fixed") << "\n"
               << "Type 1 Particle Percentage: " << percent_type1 << "%\n"
-              << "Test Case: " << testCase << "\n";
-    
+              << "Test Case: " << (testCase == -1 ? ("Random") : std::to_string(testCase))<< "\n";
+    std::cout << "Starting simulation" << std::endl;
+
     if (vm.count("ic-one") || vm.count("ic-one-vel") || vm.count("ic-two") || vm.count("ic-two-pass1") || vm.count("ic-two-pass2") || vm.count("ic-two-pass3")) {
+        // Start time measurement.
+        auto start = std::chrono::high_resolution_clock::now();
+        
         // Initialize and run the simulation with the specified test case
         MolecularDynamics simulation(N, dt, Lx, Ly, Lz, testCase, temp, percent_type1, T);
         simulation.runSimulation();
+
+        // End time measurement.
+        auto end = std::chrono::high_resolution_clock::now();
+        auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
+        double duration_seconds = duration / 1000.0;
+        std::cout << "Simulation took " << duration_seconds << " seconds." << std::endl;
+        std::cout << "Relevant files stored!." << std::endl;
+        std::cout << "Simulation complete." << std::endl;
+        
     } else if (vm.count("ic-random")) {
+        // Start time measurement.
+        auto start = std::chrono::high_resolution_clock::now();
+
         // Initialize and run the simulation with random initial conditions
         MolecularDynamics simulation(N, dt, Lx, Ly, Lz, -1, temp, percent_type1, T);
         simulation.runSimulation();
+
+        // End time measurement.
+        auto end = std::chrono::high_resolution_clock::now();
+        auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
+        double duration_seconds = duration / 1000.0;
+        std::cout << "Simulation took " << duration_seconds << " seconds." << std::endl;
+        std::cout << "Relevant files stored!." << std::endl;
+        std::cout << "Simulation complete." << std::endl;
     }
 
     return 0;
