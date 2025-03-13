@@ -1,6 +1,7 @@
 #include "../include/md.h"
 #include <ctime>
 #include <cmath>
+#include <omp.h>
 
 MolecularDynamics::MolecularDynamics(int numParticles, double dt, double Lx, double Ly, double Lz, int testCase, double temp, double percent_type1, double finalTime)
     : N(numParticles), dt(dt), Lx(Lx), Ly(Ly), Lz(Lz), testCase(testCase), temp(temp), percent_type1(percent_type1), finalTime(finalTime), writeFile("particle_data.txt", "kinetic_energy.txt") {
@@ -157,6 +158,74 @@ void MolecularDynamics::calForces() {
             force_j[2] -= f * dz;
         }
     }
+};
+
+void MolecularDynamics::calForcesParallel() {
+    // Clear forces first 
+
+    for (size_t i = 0; i < particles.size(); ++i) {
+        particles[i].setForce({0.0, 0.0, 0.0});
+    }
+
+    // Use lookup tables for interaction parameters
+    static constexpr double sigma2_table[2][2] = {
+        {1.0, 4.0},
+        {4.0, 9.0}
+    };
+    static constexpr double epsilon_table[2][2] = {
+        {3.0, 15.0},
+        {15.0, 60.0}
+    };
+
+    const size_t n = particles.size();
+    // Parallelize the outer loop using OpenMP; use dynamic scheduling for load balance.
+    #pragma omp parallel for schedule(dynamic)
+    for (size_t i = 0; i < n; ++i) {
+        // Cache particle i position and type
+        const auto& pos_i = particles[i].getPosition();
+        const int type_i = particles[i].getType();
+        auto &force_i = particles[i].getForce();
+        
+        for (size_t j = i + 1; j < n; ++j) {
+            // Cache particle j position and type
+            const auto& pos_j = particles[j].getPosition();
+            const int type_j = particles[j].getType();
+            auto &force_j = particles[j].getForce();
+            
+            // Compute the vector between particles and squared distance
+            const double dx = pos_i[0] - pos_j[0];
+            const double dy = pos_i[1] - pos_j[1];
+            const double dz = pos_i[2] - pos_j[2];
+            const double r2 = dx * dx + dy * dy + dz * dz;
+            
+            // Get sigma2 and epsilon from lookup table
+            const double sigma2 = sigma2_table[type_i][type_j];
+            const double epsilon = epsilon_table[type_i][type_j];
+            
+            // Calculate required powers
+            const double sigma6 = sigma2 * sigma2 * sigma2;
+            const double sigma12 = sigma6 * sigma6;
+            const double inv_r2 = 1.0 / r2;
+            const double inv_r6 = inv_r2 * inv_r2 * inv_r2;
+            const double inv_r12 = inv_r6 * inv_r6;
+            
+            // Compute magnitude of the force using the Lennard-Jones formula
+            const double f = 24.0 * epsilon * inv_r2 * (2.0 * sigma12 * inv_r12 - sigma6 * inv_r6);
+            
+            // Update force for particle i (only this thread modifies it)
+            force_i[0] += f * dx;
+            force_i[1] += f * dy;
+            force_i[2] += f * dz;
+            
+            // For particle j, use atomic updates since multiple threads may update the same particle.
+            #pragma omp atomic
+            force_j[0] -= f * dx;
+            #pragma omp atomic
+            force_j[1] -= f * dy;
+            #pragma omp atomic
+            force_j[2] -= f * dz;
+        }
+    }
 }
 
 void MolecularDynamics::forwardEuler() {
@@ -254,7 +323,7 @@ void MolecularDynamics::runSimulation() {
         calKE();
         if (testCase == -1) 
             velRescale();
-        calForces();
+        calForcesParallel();
         forwardEuler();
 
         if (step % outputStep == 0) {

@@ -34,6 +34,7 @@ private:
 
     bool stabilityCheck(const std::array<double, 3>& position);
     void calForces();
+    void calForcesParallel();
     void forwardEuler();
     void bcCheck();
     void calKE();

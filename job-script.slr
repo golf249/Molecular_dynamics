@@ -1,0 +1,8 @@
+#!/bin/bash
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --mem=8000MB
+#SBATCH --time=01:00:00
+#SBATCH --job-name=cw
+#SBATCH --partition=short
+./mdpar
