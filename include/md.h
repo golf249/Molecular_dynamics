@@ -13,7 +13,7 @@
 class MolecularDynamics {
 public:
     MolecularDynamics(int numParticles, double dt, double Lx, double Ly, double Lz, int testCase = -1, double temp = -1.0, double percent_type1 = 10.0, double finalTime = -1.0);
-    void initializeParticles();
+    void initialiseParticles();
     void runSimulation();
     void outputParticleData(double time);
     void outputKineticEnergy(double time);
@@ -32,6 +32,7 @@ private:
     std::vector<Particle> particles;
     WriteFile writeFile;
 
+    void assignRandomStates(const int numType, const int type) ;
     bool stabilityCheck(const std::array<double, 3>& position);
     void calForces();
     void calForcesParallel();

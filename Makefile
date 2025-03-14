@@ -62,7 +62,7 @@ $(OBJDIR)/%.o: tests/%.cpp | $(OBJDIR)
 $(OBJDIR):
 	mkdir -p $(OBJDIR)
 
-# Target to run tests.
+# Target to run tests 
 .PHONY: test
 test: $(TARGET_TEST)
 	./$(TARGET_TEST)
