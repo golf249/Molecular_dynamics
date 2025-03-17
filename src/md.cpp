@@ -346,7 +346,7 @@ void MolecularDynamics::velRescale() {
     }
 
     constexpr double kb = 0.8314459920816467; // Boltzmann constant
-    double tempKE = (2.0 / (3.0 * kb)) * kineticEnergy;
+    double tempKE = (2.0 / (3.0 * kb * N)) * kineticEnergy;
     const double lambda = std::sqrt(temp / tempKE);
 
     for (Particle& p : particles) {
