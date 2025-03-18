@@ -2,7 +2,7 @@
 CXX = g++-10
 
 # Compiler flags for both builds (serial and parallel)
-CXXFLAGS = -std=c++11 -g -Wall -Iinclude -O0
+CXXFLAGS = -std=c++11 -g -Wall -Iinclude -O3
 
 # Libraries for your main executable
 LDLIBS = -lboost_program_options
@@ -19,21 +19,17 @@ TARGET_SERIAL = $(OBJDIR)/md
 
 # Production object files and executable for the parallel build
 PAR_CXXFLAGS = $(CXXFLAGS) -fopenmp
-# Note: We now add the flag -DPARALLEL_FORCES when compiling parallel objects.
 PAR_OBJ = $(patsubst src/%.cpp, $(OBJDIR)/%.par.o, $(SRC))
 TARGET_PAR = $(OBJDIR)/mdpar
 
-# Test source file(s)
+# Test source file
 TEST_SRC = tests/unittests.cpp
 TEST_OBJ = $(patsubst tests/%.cpp, $(OBJDIR)/%.o, $(TEST_SRC))
 TARGET_TEST = $(OBJDIR)/unittests
 
-# Default target builds the serial main executable
-all: $(TARGET_SERIAL)
-
 # Link production object files to create the serial executable
 $(TARGET_SERIAL): $(OBJ)
-	$(CXX) $(PAR_CXXFLAGS) -o $@ $^ $(LDLIBS)
+	$(CXX) $(CXXFLAGS) -o $@ $^ $(LDLIBS)
 
 # Build test executable by linking test and production object files.
 # Exclude main.o from the production objects so the Boost.Test main is used.
@@ -42,7 +38,7 @@ $(TARGET_TEST): $(TEST_OBJ) $(TEST_PROD_OBJ)
 	$(CXX) $(CXXFLAGS) -o $@ $^ $(LDLIBS) -lboost_unit_test_framework
 
 # Build the parallel executable (mdpar) from production sources compiled with OpenMP flags
-# and the macro to enable parallel forces.
+# and the macro to enable parallel forces computation.
 $(TARGET_PAR): $(PAR_OBJ)
 	$(CXX) $(PAR_CXXFLAGS) -DPARALLEL_FORCES -o $@ $^ $(LDLIBS)
 
@@ -61,6 +57,9 @@ $(OBJDIR)/%.o: tests/%.cpp | $(OBJDIR)
 # Create the build directory if it doesn't exist
 $(OBJDIR):
 	mkdir -p $(OBJDIR)
+
+# Default target builds the serial main executable
+all: $(TARGET_SERIAL)
 
 # Target to run tests 
 .PHONY: test

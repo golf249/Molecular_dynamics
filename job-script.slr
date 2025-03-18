@@ -1,11 +1,14 @@
 #!/bin/bash
 #SBATCH --nodes=1
-#SBATCH --ntasks=44
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=48
 #SBATCH --mem=128000MB
 #SBATCH --time=01:00:00
 #SBATCH --job-name=gr521_cw
 #SBATCH --partition=short
 #SBATCH --mail-type=END
 #SBATCH --mail-user=gr521@ic.ac.uk
+
+export OMP_NUM_THREADS=$SLURM_CPUS_PER_TASK
 
 build/mdpar --ic-random --N 10000 --T 0.5 --Lx 50 --Ly 50 --Lz 50 --temp 80

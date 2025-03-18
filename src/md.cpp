@@ -186,9 +186,6 @@ void MolecularDynamics::calForces() {
     }
 };
 
-// Here AI was used to find the best way to parallelize the forces calculation between particles,
-// specifically instead of using directives such as critical or atomic for calculating , the use of thread-local arrays
-// was recommened. Then, the implementation of the code was done by me.
 void MolecularDynamics::calForcesParallel() {
     const size_t n = particles.size();
 
@@ -202,7 +199,7 @@ void MolecularDynamics::calForcesParallel() {
     #ifdef _OPENMP
         num_threads = omp_get_max_threads();
     #endif
-
+    
     // threadForces[threadID][i] will store local force for particle i computed by thread threadID in a 3D array.
     std::vector<std::vector<std::array<double, 3>>> threadForces(num_threads, 
         std::vector<std::array<double, 3>>(n, {0.0, 0.0, 0.0}));
@@ -269,6 +266,10 @@ void MolecularDynamics::calForcesParallel() {
     } // End parallel region
 
     // Combine the thread-local force accumulations into the particles’ force.
+    #ifdef _OPENMP
+        #pragma omp parallel for
+    #endif
+
     for (size_t i = 0; i < n; ++i) {
         std::array<double, 3> combined = {0.0, 0.0, 0.0};
         for (int threadID = 0; threadID < num_threads; ++threadID) {
@@ -379,12 +380,14 @@ void MolecularDynamics::runSimulation() {
         // Use a preprocessor macro to determine which implementation of calForces to use (serial/ OpenMP / CUDA)
         if (testCase == -1) 
             velRescale();
+            
         #ifdef PARALLEL_FORCES
             calForcesParallel();
-            // std::cout << "Using parallel forces" << std::endl;
+        #elif defined(CUDA_ENABLED)
+            MolecularDynamics::calForcesCUDA();
+            std::cout << "CUDA implemented!" << std::endl;
         #else
             calForces();
-            // std::cout << "Using serial forces" << std::endl;
         #endif
         forwardEuler();
 
