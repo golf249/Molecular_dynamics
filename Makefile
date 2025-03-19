@@ -1,14 +1,18 @@
 # Compiler
 CXX = g++-10
+NVCC = nvcc
 
 # Compiler flags for both builds (serial and parallel)
 CXXFLAGS = -std=c++11 -g -Wall -Iinclude -O3
+NVCCFLAGS = -std=c++11 -g -Xcompiler -Wall -Iinclude_cuda -O3
 
 # Libraries for your main executable
 LDLIBS = -lboost_program_options
 
 # Source files for production code
 SRC = $(wildcard src/*.cpp)
+CUDA_SRC = $(wildcard src_cuda/*.cu)
+COMMON_SRC = src/Particle.cpp src/writeFile.cpp src/main.cpp
 
 # Object files directory
 OBJDIR = build
@@ -21,6 +25,10 @@ TARGET_SERIAL = $(OBJDIR)/md
 PAR_CXXFLAGS = $(CXXFLAGS) -fopenmp
 PAR_OBJ = $(patsubst src/%.cpp, $(OBJDIR)/%.par.o, $(SRC))
 TARGET_PAR = $(OBJDIR)/mdpar
+
+# Production object files and executable for the CUDA build
+CUDA_OBJ = $(patsubst src_cuda/%.cu, $(OBJDIR)/%.cu.o, $(CUDA_SRC)) $(patsubst src/%.cpp, $(OBJDIR)/%.o, $(COMMON_SRC))
+TARGET_CUDA = $(OBJDIR)/mdcuda
 
 # Test source file
 TEST_SRC = tests/unittests.cpp
@@ -42,6 +50,10 @@ $(TARGET_TEST): $(TEST_OBJ) $(TEST_PROD_OBJ)
 $(TARGET_PAR): $(PAR_OBJ)
 	$(CXX) $(PAR_CXXFLAGS) -DPARALLEL_FORCES -o $@ $^ $(LDLIBS)
 
+# Build the CUDA executable (mdcuda) from production sources compiled with NVCC
+$(TARGET_CUDA): $(CUDA_OBJ)
+	$(NVCC) $(NVCCFLAGS) -DCUDA_ENABLED -o $@ $^ $(LDLIBS)
+
 # Compile production source files into object files (serial)
 $(OBJDIR)/%.o: src/%.cpp | $(OBJDIR)
 	$(CXX) $(CXXFLAGS) -c $< -o $@
@@ -49,6 +61,14 @@ $(OBJDIR)/%.o: src/%.cpp | $(OBJDIR)
 # Compile production source files into parallel object files (with -fopenmp and -DPARALLEL_FORCES)
 $(OBJDIR)/%.par.o: src/%.cpp | $(OBJDIR)
 	$(CXX) $(PAR_CXXFLAGS) -DPARALLEL_FORCES -c $< -o $@
+
+# Compile CUDA source files into object files
+$(OBJDIR)/%.cu.o: src_cuda/%.cu | $(OBJDIR)
+	$(NVCC) $(NVCCFLAGS) -c $< -o $@
+
+# Compile .cpp files with NVCC when CUDA is enabled
+$(OBJDIR)/%.o: src/%.cpp | $(OBJDIR)
+	$(NVCC) $(NVCCFLAGS) -DCUDA_ENABLED -c $< -o $@
 
 # Compile test source files into object files
 $(OBJDIR)/%.o: tests/%.cpp | $(OBJDIR)
@@ -69,6 +89,10 @@ test: $(TARGET_TEST)
 # Target to run the parallel executable.
 .PHONY: mdpar
 mdpar: $(TARGET_PAR)
+
+# Target to run the CUDA executable.
+.PHONY: mdcuda
+mdcuda: $(TARGET_CUDA)
 
 # Clean up build files
 clean:
