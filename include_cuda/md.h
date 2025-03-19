@@ -12,7 +12,8 @@
 
 class MolecularDynamics {
 public:
-    MolecularDynamics(int numParticles, double dt, double Lx, double Ly, double Lz, int testCase = -1, double temp = -1.0, double percent_type1 = 10.0, double finalTime = -1.0);
+    MolecularDynamics(int numParticles, double dt, double Lx, double Ly, double Lz,
+         int testCase = -1, double temp = -1.0, double percent_type1 = 10.0, double finalTime = -1.0);
     ~MolecularDynamics();
     void initialiseParticles();
     void runSimulation();
@@ -31,7 +32,6 @@ private:
     double finalTime;
     double kineticEnergy;
     std::vector<Particle> particles;
-    Particle* particlesCUDA;
     WriteFile writeFile;
     double* position_d; 
     double* force_d;  
@@ -44,5 +44,6 @@ private:
     void bcCheck();
     void calKE();
     void velRescale();
+    void setParticleForces();
 };
 #endif

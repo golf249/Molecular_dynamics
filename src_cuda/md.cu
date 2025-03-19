@@ -4,66 +4,63 @@
 #include <omp.h>
 #include <iostream>
 
-__global__ void computeLJForces(double* position, double* force_temp, int* type, int n) {
-    
+// New kernel: each thread computes the net force on one particle.
+__global__ void computeLJForces(double* position, double* force, int* type, int n) {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
-    int j = blockIdx.y * blockDim.y + threadIdx.y;
-    if (i >= n || j >= n || i == j) return;
-
+    if (i >= n) return;
+    
+    double force_accum_x = 0.0, force_accum_y = 0.0, force_accum_z = 0.0;
+    
     double posx_i = position[3 * i];
     double posy_i = position[3 * i + 1];
     double posz_i = position[3 * i + 2];
     int type_i = type[i];
-
-    double posx_j = position[3 * j];
-    double posy_j = position[3 * j + 1];
-    double posz_j = position[3 * j + 2];
-    int type_j = type[j];
-
-    double dx = posx_i - posx_j;
-    double dy = posy_i - posy_j;
-    double dz = posz_i - posz_j;
-    double r2 = dx * dx + dy * dy + dz * dz;
-
-    double sigma2, epsilon;
-    if (type_i == 0 && type_j == 0) {
-        sigma2 = 1.0;
-        epsilon = 3.0;
-    } else if (type_i == 1 && type_j == 1) {
-        sigma2 = 9.0;
-        epsilon = 60.0;
-    } else {
-        sigma2 = 4.0;
-        epsilon = 15.0;
-    }
-
-    double sigma6 = sigma2 * sigma2 * sigma2;
-    double sigma12 = sigma6 * sigma6;
-    double inv_r2 = 1.0 / r2;
-    double inv_r6 = inv_r2 * inv_r2 * inv_r2;
-    double inv_r12 = inv_r6 * inv_r6;
-
-    const double f = 24.0 * epsilon * inv_r2 * (2.0 * sigma12 * inv_r12 - sigma6 * inv_r6);
-
-    force_temp[3 * (i * n + j)] = f * dx;
-    force_temp[3 * (i * n + j) + 1] = f * dy;
-    force_temp[3 * (i * n + j) + 2] = f * dz;
-}
-
-__global__ void sumForces(double* force_temp, double* force, int n) {
-    int i = blockIdx.x * blockDim.x + threadIdx.x;
-    if (i >= n) return;
-
-    double fx = 0.0, fy = 0.0, fz = 0.0;
+    
+    // Loop over all particles to compute interactions.
     for (int j = 0; j < n; ++j) {
-        fx += force_temp[3 * (i * n + j)];
-        fy += force_temp[3 * (i * n + j) + 1];
-        fz += force_temp[3 * (i * n + j) + 2];
-    }
+        if (i == j) continue;
+        
+        double posx_j = position[3 * j];
+        double posy_j = position[3 * j + 1];
+        double posz_j = position[3 * j + 2];
+        int type_j = type[j];
+        
+        double dx = posx_i - posx_j;
+        double dy = posy_i - posy_j;
+        double dz = posz_i - posz_j;
+        double r2 = dx * dx + dy * dy + dz * dz;
+        
+        double sigma2, epsilon;
+        if (type_i == 0 && type_j == 0) {
+            sigma2 = 1.0;
+            epsilon = 3.0;
+        } else if (type_i == 1 && type_j == 1) {
+            sigma2 = 9.0;
+            epsilon = 60.0;
+        } else {
+            sigma2 = 4.0;
+            epsilon = 15.0;
+        }
+        
+        double sigma6 = sigma2 * sigma2 * sigma2;
+        double sigma12 = sigma6 * sigma6;
+        double inv_r2 = 1.0 / r2;
+        double inv_r6 = inv_r2 * inv_r2 * inv_r2;
+        double inv_r12 = inv_r6 * inv_r6;
+        
+        double f = 24.0 * epsilon * inv_r2 * (2.0 * sigma12 * inv_r12 - sigma6 * inv_r6);
+        
+        force_accum_x += f * dx;
+        force_accum_y += f * dy;
+        force_accum_z += f * dz;
 
-    force[3 * i] = fx;
-    force[3 * i + 1] = fy;
-    force[3 * i + 2] = fz;
+        //printf("i,j %d,%d Force: (%f, %f, %f)\n", i, j, f * dx, dy, dz);
+    }
+    
+    // Write the net force for particle i to global memory.
+    force[3 * i]     = force_accum_x;
+    force[3 * i + 1] = force_accum_y;
+    force[3 * i + 2] = force_accum_z;
 }
 
 // I acknowledge the use of ChatGPT 4.0 to generate an outline of how the structure of the MolecularDynamics class should be implemented.
@@ -71,10 +68,11 @@ __global__ void sumForces(double* force_temp, double* force, int n) {
 // the relevant method, 
 
 // Here AI was used to find the way to generate random number using the current time.
-MolecularDynamics::MolecularDynamics(int numParticles, double dt, double Lx, double Ly, double Lz, int testCase, double temp, double percent_type1, double finalTime)
+MolecularDynamics::MolecularDynamics(int numParticles, double dt, double Lx, double Ly, double Lz, int testCase, 
+    double temp, double percent_type1, double finalTime)
     : N(numParticles), dt(dt), Lx(Lx), Ly(Ly), Lz(Lz), testCase(testCase), temp(temp), percent_type1(percent_type1), finalTime(finalTime), 
-    writeFile("particle_data.txt", "kinetic_energy.txt"), position_d(nullptr), force_d(nullptr), type_d(nullptr), d_force_temp(nullptr) {
-    std::srand(static_cast<unsigned int>(std::time(nullptr))); // Seed the random number generator with the current time
+    writeFile("particle_data.txt", "kinetic_energy.txt"), position_d(nullptr), force_d(nullptr), type_d(nullptr) {
+    std::srand(static_cast<unsigned int>(std::time(nullptr))); 
     initialiseParticles();
 }
 
@@ -83,7 +81,6 @@ MolecularDynamics::~MolecularDynamics() {
     cudaFree(position_d);
     cudaFree(force_d);
     cudaFree(type_d);
-    cudaFree(d_force_temp);
 }
 
 /**
@@ -115,9 +112,7 @@ void MolecularDynamics::initialiseParticles() {
             Particle({10.0, 10.0, 10.0}, {0.0, 0.0, 0.0}, 0)
         };
         int N = particles.size();
-        std::cout << N << std::endl;
         // Allocate GPU memory on the device
-        cudaMallocManaged(&d_force_temp, 3 * N * N *sizeof(double));
         cudaMallocManaged(&position_d, 3 * N * sizeof(double));
         cudaMallocManaged(&force_d, 3 * N * sizeof(double));
         cudaMallocManaged(&type_d, N * sizeof(int));
@@ -126,9 +121,7 @@ void MolecularDynamics::initialiseParticles() {
             Particle({10.0, 10.0, 10.0}, {5.0, 2.0, 1.0}, 0)
         };
         int N = particles.size();
-        std::cout << N << std::endl;
         // Allocate GPU memory on the device
-        cudaMallocManaged(&d_force_temp, 3 * N * N *sizeof(double));
         cudaMallocManaged(&position_d, 3 * N * sizeof(double));
         cudaMallocManaged(&force_d, 3 * N * sizeof(double));
         cudaMallocManaged(&type_d, N * sizeof(int));
@@ -138,9 +131,7 @@ void MolecularDynamics::initialiseParticles() {
             Particle({11.5, 10.0, 10.0}, {0.0, 0.0, 0.0}, 0)
         };
         int N = particles.size();
-        std::cout << N << std::endl;
         // Allocate GPU memory on the device
-        cudaMallocManaged(&d_force_temp, 3 * N * N *sizeof(double));
         cudaMallocManaged(&position_d, 3 * N * sizeof(double));
         cudaMallocManaged(&force_d, 3 * N * sizeof(double));
         cudaMallocManaged(&type_d, N * sizeof(int));
@@ -150,9 +141,7 @@ void MolecularDynamics::initialiseParticles() {
             Particle({11.5, 8.5, 10.0}, {-0.5, 0.0, 0.0}, 0)
         };
         int N = particles.size();
-        std::cout << N << std::endl;
         // Allocate GPU memory on the device
-        cudaMallocManaged(&d_force_temp, 3 * N * N *sizeof(double));
         cudaMallocManaged(&position_d, 3 * N * sizeof(double));
         cudaMallocManaged(&force_d, 3 * N * sizeof(double));
         cudaMallocManaged(&type_d, N * sizeof(int));
@@ -162,9 +151,7 @@ void MolecularDynamics::initialiseParticles() {
             Particle({11.5, 8.7, 10.0}, {-0.5, 0.0, 0.0}, 0)
         };
         int N = particles.size();
-        std::cout << N << std::endl;
         // Allocate GPU memory on the device
-        cudaMallocManaged(&d_force_temp, 3 * N * N *sizeof(double));
         cudaMallocManaged(&position_d, 3 * N * sizeof(double));
         cudaMallocManaged(&force_d, 3 * N * sizeof(double));
         cudaMallocManaged(&type_d, N * sizeof(int));
@@ -174,9 +161,7 @@ void MolecularDynamics::initialiseParticles() {
             Particle({11.5, 8.7, 10.0}, {-0.5, 0.0, 0.0}, 1)
         };
         int N = particles.size();
-        std::cout << N << std::endl;
         // Allocate GPU memory on the device
-        cudaMallocManaged(&d_force_temp, 3 * N * N *sizeof(double));
         cudaMallocManaged(&position_d, 3 * N * sizeof(double));
         cudaMallocManaged(&force_d, 3 * N * sizeof(double));
         cudaMallocManaged(&type_d, N * sizeof(int));
@@ -184,7 +169,6 @@ void MolecularDynamics::initialiseParticles() {
         int numType1 = static_cast<int>(std::ceil(percent_type1 / 100.0 * N));
         int numType0 = N - numType1;
         // Allocate GPU memory on the device
-        cudaMallocManaged(&d_force_temp, 3 * N * N *sizeof(double));
         cudaMallocManaged(&position_d, 3 * N * sizeof(double));
         cudaMallocManaged(&force_d, 3 * N * sizeof(double));
         cudaMallocManaged(&type_d, N * sizeof(int));
@@ -227,41 +211,31 @@ bool MolecularDynamics::stabilityCheck(const std::array<double, 3>& position) {
 
 void MolecularDynamics::calForcesCUDA() {
     const int n = particles.size();
-    std::cout << "yo" << std::endl;    
-
-    // Populate the arrays in the allocated memory
+    
+    // Populate managed arrays from particle data.
     for (int i = 0; i < n; i++) {
         const std::array<double, 3>& pos = particles[i].getPosition();
-        std::cout << "yo" << std::endl;    
 
         // Get the position of the particle
         position_d[3 * i] = pos[0];
         position_d[3 * i + 1] = pos[1];
         position_d[3 * i + 2] = pos[2];
-        std::cout << "yo" << std::endl;    
 
         // Set the forces for each particle to 0
         force_d[3 * i] = 0.0;
         force_d[3 * i + 1] = 0.0;
         force_d[3 * i + 2] = 0.0;
-        // Get the type of the particle
+
+        // Get particle type.
         type_d[i] = particles[i].getType();
     }
-    std::cout << "yo" << std::endl;    
-
-    int numThreads = 16;
-    dim3 threadsPerBlock(numThreads, numThreads);
-    dim3 numBlocks((n + numThreads - 1) / numThreads, (n + numThreads - 1) / numThreads);
-    std::cout << "NumBlocks: " << numBlocks.x << " " << numBlocks.y << std::endl;
-    // Compute LJ forces and store in temporary buffer
-    computeLJForces<<<numBlocks, threadsPerBlock>>>(position_d, d_force_temp, type_d, n);
-    cudaDeviceSynchronize();  // Wait for kernel completion
-
-    // Sum up forces into d_force
-    dim3 sumBlocks((n + numThreads - 1) / numThreads);
-    dim3 sumThreads(numThreads);
-    sumForces<<<sumBlocks, sumThreads>>>(d_force_temp, force_d, n);
-    cudaDeviceSynchronize();  // Ensure summation is complete
+    
+    // Launch the kernel with one thread per particle.
+    int threadsPerBlock = 256;
+    int numBlocks = (n + threadsPerBlock - 1) / threadsPerBlock;
+    computeLJForces<<<numBlocks, threadsPerBlock>>>(position_d, force_d, type_d, n);
+    cudaDeviceSynchronize();
+    MolecularDynamics::setParticleForces();
 }
 
 void MolecularDynamics::forwardEuler() {
@@ -278,6 +252,20 @@ void MolecularDynamics::forwardEuler() {
         p.setPosition(position);
     }
     bcCheck();
+}
+
+void MolecularDynamics::setParticleForces() {
+    int n = particles.size();
+    std::array<double, 3> particleForce;
+    double fx, fy, fz;
+
+    for (int i = 0; i < n; ++i) {
+        fx = force_d[3 * i];
+        fy = force_d[3 * i + 1];
+        fz = force_d[3 * i + 2];
+        particleForce = {fx, fy, fz};
+        particles[i].setForce(particleForce);
+    }
 }
 
 void MolecularDynamics::bcCheck() {
@@ -361,9 +349,8 @@ void MolecularDynamics::runSimulation() {
 
         if (testCase == -1) 
             velRescale();
-        std::cout << "yo" << std::endl;    
+        
         calForcesCUDA();
-        // std::cout << "yo" << std::endl;    
 
         forwardEuler();
 
