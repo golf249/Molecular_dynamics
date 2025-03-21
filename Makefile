@@ -11,13 +11,13 @@ LDLIBS = -lboost_program_options
 
 # Source files for production code
 SRC = $(wildcard src/*.cpp)
-CUDA_SRC = $(wildcard src_cuda/*.cu)
+CUDA_SRC = $(wildcard src/*.cu)
 COMMON_SRC = src/Particle.cpp src/writeFile.cpp src/main.cpp
 
 # Object files directory
 OBJDIR = build
 
-# Production object files and executable for the serial build
+# Production object files and executable for the serial build (default target)
 OBJ = $(patsubst src/%.cpp, $(OBJDIR)/%.o, $(SRC))
 TARGET_SERIAL = $(OBJDIR)/md
 
@@ -35,7 +35,7 @@ TEST_SRC = tests/unittests.cpp
 TEST_OBJ = $(patsubst tests/%.cpp, $(OBJDIR)/%.o, $(TEST_SRC))
 TARGET_TEST = $(OBJDIR)/unittests
 
-# Link production object files to create the serial executable
+# Link production object files to create the serial executable (default target)
 $(TARGET_SERIAL): $(OBJ)
 	$(CXX) $(CXXFLAGS) -o $@ $^ $(LDLIBS)
 
@@ -52,9 +52,9 @@ $(TARGET_PAR): $(PAR_OBJ)
 
 # Build the CUDA executable (mdcuda) from production sources compiled with NVCC
 $(TARGET_CUDA): $(CUDA_OBJ)
-	$(NVCC) $(NVCCFLAGS) -DCUDA_ENABLED -o $@ $^ $(LDLIBS)
+	$(NVCC) $(NVCCFLAGS) -o $@ $^ $(LDLIBS)
 
-# Compile production source files into object files (serial)
+# Compile production source files into object files (serial) using g++
 $(OBJDIR)/%.o: src/%.cpp | $(OBJDIR)
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
@@ -62,15 +62,11 @@ $(OBJDIR)/%.o: src/%.cpp | $(OBJDIR)
 $(OBJDIR)/%.par.o: src/%.cpp | $(OBJDIR)
 	$(CXX) $(PAR_CXXFLAGS) -DPARALLEL_FORCES -c $< -o $@
 
-# Compile CUDA source files into object files
-$(OBJDIR)/%.cu.o: src_cuda/%.cu | $(OBJDIR)
+# Compile CUDA source files into object files (NVCC)
+$(OBJDIR)/%.cu.o: src/%.cu | $(OBJDIR)
 	$(NVCC) $(NVCCFLAGS) -c $< -o $@
 
-# Compile .cpp files with NVCC when CUDA is enabled
-$(OBJDIR)/%.o: src/%.cpp | $(OBJDIR)
-	$(NVCC) $(NVCCFLAGS) -DCUDA_ENABLED -c $< -o $@
-
-# Compile test source files into object files
+# Compile test source files into object files (using g++)
 $(OBJDIR)/%.o: tests/%.cpp | $(OBJDIR)
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
@@ -78,7 +74,7 @@ $(OBJDIR)/%.o: tests/%.cpp | $(OBJDIR)
 $(OBJDIR):
 	mkdir -p $(OBJDIR)
 
-# Default target builds the serial main executable
+# Default target builds the serial main executable using g++
 all: $(TARGET_SERIAL)
 
 # Target to run tests 
@@ -97,5 +93,11 @@ mdcuda: $(TARGET_CUDA)
 # Clean up build files
 clean:
 	rm -rf $(OBJDIR)
+
+clean-doc:
+	rm -rf docs/*
+
+doc:
+	doxygen Doxyfile
 
 .PHONY: all test clean

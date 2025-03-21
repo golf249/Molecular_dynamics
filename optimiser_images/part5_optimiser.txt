@@ -1,9 +1,0 @@
-THESE ARE ALL RAN WITH : RANDOM, N=200, T=15, TEMP=30;
-
-First iteration:
-
-We can see that pow function is very computationally expensive and it can be clearly seen in the image below in the overview of the optimiser. The total time it took was 85.327 s.
-
-Second iteration:
-
-Removing the power implementation did help reduce around 67.000 s. Now the current code's inefficiency comes from mainly the getting positions in line 130.

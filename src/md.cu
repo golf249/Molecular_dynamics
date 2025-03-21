@@ -1,16 +1,51 @@
-#include "../include_cuda/md.h"
+/**
+ * @file md.cu
+ * @brief Implementation of the MolecularDynamics class.
+ * 
+ * This file contains the implementation of the MolecularDynamics class, which
+ * is responsible for simulating molecular dynamics. The class includes methods
+ * for initializing particles, computing forces, updating positions and velocities,
+ * and handling boundary conditions.
+ * 
+ * The implementation leverages CUDA for parallel computation to efficiently
+ * handle large numbers of particles and interactions.
+ * 
+ * @note Ensure that the CUDA runtime and necessary libraries are properly
+ * installed and configured before compiling and running this code.
+ */
+
+#include "../include/md.h"
 #include <ctime>
 #include <cmath>
 #include <omp.h>
 #include <iostream>
 
-// New kernel: each thread computes the net force on one particle.
-__global__ void computeLJForces(double* position, double* force, int* type, int n) {
+// I acknowledge the use of ChatGPT 4.0 to generate an outline of how the structure of the MolecularDynamics class should be implemented.
+// The majority of the content inside the methods was implemented by me. Where the code that was produced by AI is marked with a comment inside
+// the relevant method, 
+
+/**
+ * @brief Compute Lennard-Jones forces for a set of particles.
+ *
+ * This kernel computes the Lennard-Jones forces acting on each particle
+ * based on their positions and types. The forces are stored in the provided
+ * force array.
+ *
+ * @param position Pointer to the array of particle positions. The array should
+ *                 be of size 3 * n, where n is the number of particles.
+ * @param force    Pointer to the array where the computed forces will be stored.
+ *                 The array should be of size 3 * n.
+ * @param type     Pointer to the array of particle types. The array should be
+ *                 of size n.
+ * @param n        The number of particles.
+ */
+__global__ void calLJForces(double* position, double* force, int* type, int n) {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i >= n) return;
     
     double force_accum_x = 0.0, force_accum_y = 0.0, force_accum_z = 0.0;
     
+    // Cache particle i position and type to reduce repeated lookups
     double posx_i = position[3 * i];
     double posy_i = position[3 * i + 1];
     double posz_i = position[3 * i + 2];
@@ -19,17 +54,20 @@ __global__ void computeLJForces(double* position, double* force, int* type, int 
     // Loop over all particles to compute interactions.
     for (int j = 0; j < n; ++j) {
         if (i == j) continue;
-        
+
+        // Cache particle j position and type to reduce repeated lookups
         double posx_j = position[3 * j];
         double posy_j = position[3 * j + 1];
         double posz_j = position[3 * j + 2];
         int type_j = type[j];
         
+        // Compute the vector between particles and squared distance
         double dx = posx_i - posx_j;
         double dy = posy_i - posy_j;
         double dz = posz_i - posz_j;
         double r2 = dx * dx + dy * dy + dz * dz;
         
+        // Find correct parameters for sigma and epsilon based on particle types
         double sigma2, epsilon;
         if (type_i == 0 && type_j == 0) {
             sigma2 = 1.0;
@@ -42,6 +80,9 @@ __global__ void computeLJForces(double* position, double* force, int* type, int 
             epsilon = 15.0;
         }
         
+        // Here AI was used to find the most efficient way to represent the variables that is to be
+            // used in the force calculation, specifically the use of sigma6, sigma12, inv_r2, inv_r6, inv_r12
+            // Pre-compute powers and inverses
         double sigma6 = sigma2 * sigma2 * sigma2;
         double sigma12 = sigma6 * sigma6;
         double inv_r2 = 1.0 / r2;
@@ -63,11 +104,20 @@ __global__ void computeLJForces(double* position, double* force, int* type, int 
     force[3 * i + 2] = force_accum_z;
 }
 
-// I acknowledge the use of ChatGPT 4.0 to generate an outline of how the structure of the MolecularDynamics class should be implemented.
-// The majority of the content inside the methods was implemented by me. Where the code that was produced by AI is marked with a comment inside
-// the relevant method, 
 
-// Here AI was used to find the way to generate random number using the current time.
+/**
+ * @brief Constructs a MolecularDynamics object with the specified parameters.
+ * 
+ * @param numParticles The number of particles in the simulation.
+ * @param dt The time step for the simulation.
+ * @param Lx The length of the simulation box in the x-dimension.
+ * @param Ly The length of the simulation box in the y-dimension.
+ * @param Lz The length of the simulation box in the z-dimension.
+ * @param testCase The test case identifier for initializing the simulation.
+ * @param temp The initial temperature of the system.
+ * @param percent_type1 The percentage of particles of type 1.
+ * @param finalTime The final time for the simulation.
+ */
 MolecularDynamics::MolecularDynamics(int numParticles, double dt, double Lx, double Ly, double Lz, int testCase, 
     double temp, double percent_type1, double finalTime)
     : N(numParticles), dt(dt), Lx(Lx), Ly(Ly), Lz(Lz), testCase(testCase), temp(temp), percent_type1(percent_type1), finalTime(finalTime), 
@@ -76,6 +126,14 @@ MolecularDynamics::MolecularDynamics(int numParticles, double dt, double Lx, dou
     initialiseParticles();
 }
 
+/**
+ * @brief Destructor for the MolecularDynamics class.
+ *
+ * This destructor is responsible for cleaning up any resources
+ * allocated to the GPU. It ensures that
+ * all memory are properly released when
+ * an instance of the class is destroyed.
+ */
 MolecularDynamics::~MolecularDynamics() {
     // Free GPU memory
     cudaFree(position_d);
@@ -87,6 +145,7 @@ MolecularDynamics::~MolecularDynamics() {
  * @brief Initialises the position, velocity and mass of particles for the molecular dynamics simulation based on the specified test case.
  * 
  * This function first clears any existing particles and initialises new particles based on the value of the `testCase` member variable.
+ * For each test case, the memory for the position, force and type arrays are allocated on the GPU using `cudaMallocManaged`.
  * 
  * Test cases:
  * - 1: Initialies a single particle at position (10.0, 10.0, 10.0) with zero velocity.
@@ -172,10 +231,23 @@ void MolecularDynamics::initialiseParticles() {
         cudaMallocManaged(&position_d, 3 * N * sizeof(double));
         cudaMallocManaged(&force_d, 3 * N * sizeof(double));
         cudaMallocManaged(&type_d, N * sizeof(int));
+
+        assignRandomStates(numType1, 1);
+        assignRandomStates(numType0, 0);
 }
 }
 
-
+/**
+ * @brief Assigns random positions and velocities to a specified number of particles of a given type.
+ *
+ * This function generates random positions and velocities for a specified number of particles
+ * of a given type. The positions are generated within the bounds of the simulation box defined
+ * by Lx, Ly, and Lz. The velocities are generated randomly with components in the range [-0.5, 0.5].
+ * The function ensures that the generated positions are valid by checking them with the stabilityCheck function.
+ *
+ * @param numType The number of particles to assign random states to.
+ * @param type The type of particles to assign random states to.
+ */
 void MolecularDynamics::assignRandomStates(const int numType, const int type) {
     const double invRand = 1.0 / RAND_MAX;
     for (int i = 0; i < numType; ++i) {
@@ -195,6 +267,16 @@ void MolecularDynamics::assignRandomStates(const int numType, const int type) {
 
 // Here AI was used to outline implementation of how to detect whether particles are too close 
 // to each other, specifically the norm of the difference between the positions of two particles.
+/**
+ * @brief Checks the stability of a given position within the molecular dynamics system.
+ *
+ * This function determines whether a given position is stable by ensuring that it is not
+ * too close to any existing particles in the system. The minimum allowed distance between
+ * particles is defined by the constant R2 (0.25, which is 0.5 squared).
+ *
+ * @param position The position to check, represented as an array of three doubles.
+ * @return true if the position is stable (i.e., not too close to any other particle), false otherwise.
+ */
 bool MolecularDynamics::stabilityCheck(const std::array<double, 3>& position) {
     constexpr double R2 = 0.25; // Minimum allowed distance squared (0.5^2) {
     for (const Particle& p : particles) {
@@ -209,6 +291,18 @@ bool MolecularDynamics::stabilityCheck(const std::array<double, 3>& position) {
     return true;
 }
 
+
+/**
+ * @brief Calculates the forces acting on particles in the molecular dynamics simulation using CUDA.
+ * 
+ * This function utilizes CUDA to perform parallel computations of the forces between particles.
+ * First, the function copies the current particle positions and types into unified memory arrays,
+ * resets the force array to zero, and then launches the CUDA kernel "calLJForces". In this kernel,
+ * each thread is assigned to a single particle and computes its net force by iterating over all
+ * other particles using the Lennard-Jones potential. Predefined lookup tables are used for the
+ * interaction parameters. After synchronizing the device, the computed forces are copied back to
+ * the particle data structure via setForce().
+ */
 void MolecularDynamics::calForcesCUDA() {
     const int n = particles.size();
     
@@ -233,11 +327,36 @@ void MolecularDynamics::calForcesCUDA() {
     // Launch the kernel with one thread per particle.
     int threadsPerBlock = 256;
     int numBlocks = (n + threadsPerBlock - 1) / threadsPerBlock;
-    computeLJForces<<<numBlocks, threadsPerBlock>>>(position_d, force_d, type_d, n);
+    calLJForces<<<numBlocks, threadsPerBlock>>>(position_d, force_d, type_d, n);
     cudaDeviceSynchronize();
-    MolecularDynamics::setParticleForces();
+
+    for (int i = 0; i < n; ++i) {
+        std::array<double, 3> accum_force = {0.0,0.0,0.0};
+        accum_force[0] = force_d[3 * i];
+        accum_force[1] = force_d[3 * i + 1];
+        accum_force[2] = force_d[3 * i + 2];
+        particles[i].setForce(accum_force);
+    }    
 }
 
+/**
+ * @brief Advances the state of the molecular dynamics simulation using the forward Euler method.
+ *
+ * This method updates the velocity and position of each particle in the simulation based on the
+ * current forces acting on them. The forward Euler method is a simple numerical integration technique
+ * that approximates the new state of the system over a small time step (dt).
+ *
+ * The velocity of each particle is updated using the formula:
+ *     v_new = v_old + (dt * force / mass)
+ *
+ * The position of each particle is then updated using the formula:
+ *     x_new = x_old + (dt * v_new)
+ *
+ * After updating the velocities and positions, the method checks for boundary conditions.
+ *
+ * @note This method assumes that the particles have already been initialized with their respective
+ *       velocities, positions, forces, and masses.
+ */
 void MolecularDynamics::forwardEuler() {
     for (Particle& p : particles) {
         std::array<double, 3> velocity = p.getVelocity();
@@ -254,20 +373,28 @@ void MolecularDynamics::forwardEuler() {
     bcCheck();
 }
 
-void MolecularDynamics::setParticleForces() {
-    int n = particles.size();
-    std::array<double, 3> particleForce;
-    double fx, fy, fz;
-
-    for (int i = 0; i < n; ++i) {
-        fx = force_d[3 * i];
-        fy = force_d[3 * i + 1];
-        fz = force_d[3 * i + 2];
-        particleForce = {fx, fy, fz};
-        particles[i].setForce(particleForce);
-    }
-}
-
+/**
+ * @brief Checks and applies boundary conditions to particles in the simulation.
+ *
+ * This function iterates over all particles in the simulation and ensures that
+ * they remain within the defined simulation box boundaries. If a particle goes
+ * out of bounds, it is reflected back into the simulation box, and its velocity
+ * is adjusted accordingly to simulate a reflective boundary condition.
+ *
+ * The simulation box is defined by the dimensions Lx, Ly, and Lz along the x, y,
+ * and z axes, respectively. For each particle, the function checks its position
+ * along each axis:
+ * - If the position is less than 0, the particle is reflected back into the box
+ *   by setting its position to the negative of its current position and its
+ *   velocity to the absolute value of its current velocity.
+ * - If the position is greater than the box dimension, the particle is reflected
+ *   back into the box by setting its position to twice the box dimension minus
+ *   its current position and its velocity to the negative absolute value of its
+ *   current velocity.
+ *
+ * After adjusting the position and velocity of a particle, the function updates
+ * the particle's state.
+ */
 void MolecularDynamics::bcCheck() {
     // Reflect particles if they go out of bounds
     for (Particle& p : particles) {
@@ -275,6 +402,7 @@ void MolecularDynamics::bcCheck() {
         std::array<double, 3> velocity = p.getVelocity();
         // For each coordinate: 0->Lx, 1->Ly, 2->Lz
         for (int k = 0; k < 3; ++k) {
+            // Here AI was used only to help define L in a very compact and efficient form.
             double L = (k == 0) ? Lx : ((k == 1) ? Ly : Lz); // Select the correct bound size for each axis
             if (position[k] < 0) {
                 position[k] = -position[k];
@@ -310,6 +438,19 @@ void MolecularDynamics::calKE() {
     }
 }
 
+/**
+ * @brief Rescales the velocities of particles to match the desired temperature.
+ *
+ * This function rescales the velocities of all particles in the system to ensure
+ * that the kinetic temperature matches the desired temperature (`temp`). If the
+ * temperature (`temp`) is not set (i.e., it is -1.0), the function returns immediately.
+ *
+ * The rescaling factor (`lambda`) is calculated based on the ratio of the desired
+ * temperature to the current kinetic temperature. Each component of the velocity
+ * of every particle is then multiplied by this factor.
+ *
+ * @note The Boltzmann constant (`kb`) is defined as 0.8314459920816467.
+ */
 void MolecularDynamics::velRescale() {
     // check if temp is not set else continue
     if (temp == -1.0) {
@@ -329,13 +470,40 @@ void MolecularDynamics::velRescale() {
     }
 }
 
+/**
+ * @brief Runs the molecular dynamics simulation.
+ * 
+ * This function initializes the kinetic energy and outputs the initial conditions.
+ * It then iterates over the simulation time steps, updating the system state using
+ * the forward Euler method and computing forces using CUDA. The particle data and 
+ * kinetic energy are output at specified time intervals.
+ * 
+ * @details
+ * - Computes initial kinetic energy and outputs initial conditions.
+ * - Iterates over the simulation time steps:
+ *   - Updates the current time.
+ *   - Computes kinetic energy.
+ *   - Computes forces using CUDA.
+ *   - Updates particle positions and velocities using forward Euler method.
+ *   - Outputs particle data and kinetic energy at specified intervals.
+ * 
+ * @note If `testCase` is -1, velocity rescaling is performed.
+ * 
+ * @pre The simulation parameters such as `finalTime`, `dt`, and `testCase` must be set.
+ * @pre The output functions `outputParticleData` and `outputKineticEnergy` must be defined.
+ * 
+ * @param None
+ * @return None
+ */
 void MolecularDynamics::runSimulation() {
     // Compute initial kinetic energy
     calKE();
     
     // Output initial conditions before starting integration such that
     // the initial state is also recorded at time 0.
-    outputParticleData(0);
+    if (testCase != -1) {
+        outputParticleData(0);
+    }
     outputKineticEnergy(0);
 
     const double outputTime = 0.1; // output time for the txt files
@@ -347,8 +515,9 @@ void MolecularDynamics::runSimulation() {
         const double currentTime = step * dt;
         calKE();
 
-        if (testCase == -1) 
+        if (testCase == -1) {
             velRescale();
+        }
         
         calForcesCUDA();
 
@@ -364,13 +533,30 @@ void MolecularDynamics::runSimulation() {
     }
 }
 
+/**
+ * @brief Outputs the data of all particles at a given time.
+ *
+ * This function iterates over all particles in the system and writes their
+ * data (position and velocity) to a file.
+ *
+ * @param time The current simulation time.
+ */
 void MolecularDynamics::outputParticleData(double time) {
-    for (size_t i = 0; i < particles.size(); ++i) {
+    for (int i = 0; i < particles.size(); ++i) {
         const Particle& p = particles[i];
         writeFile.writeParticleData(time, i, p.getPosition(), p.getVelocity());
     }
 }
 
+
+/**
+ * @brief Outputs the kinetic energy of the system at a given time.
+ * 
+ * This function writes the current kinetic energy of the molecular dynamics
+ * system to a file, associating it with the specified time.
+ * 
+ * @param time The current time at which the kinetic energy is being recorded.
+ */
 void MolecularDynamics::outputKineticEnergy(double time) {
     writeFile.writeKineticEnergy(time, kineticEnergy);
 }

@@ -1,12 +1,39 @@
+/**
+ * @file unittests.cpp
+ * @brief Unit tests for the MolecularDynamics simulation.
+ *
+ * This file contains 6 unit test cases that verify 
+ * the output of the MolecularDynamics simulation by 
+ * checking the final position of the particles.
+ */
+
 #include "../include/md.h"
 
 #define BOOST_TEST_MODULE MolecularDynamicsTest
 #include <boost/test/included/unit_test.hpp>
 
-// Define tolerance variable (relative tolerance in percent)
+/// Tolerance for floating-point comparisons (in percent).
 const double tol = 0.01;
 
-// Helper function to run a simulation and return the final state
+/**
+ * @brief Helper function to run a simulation and return the final state.
+ *
+ * This function instantiates the MolecularDynamics simulation with the provided
+ * parameters, runs the simulation, and returns the final particles and kinetic
+ * energy state.
+ *
+ * @param numParticles Number of particles.
+ * @param dt Timestep.
+ * @param Lx Simulation box length in x-axis.
+ * @param Ly Simulation box length in y-axis.
+ * @param Lz Simulation box length in z-axis.
+ * @param testCase Test case identifier.
+ * @param temp Target temperature.
+ * @param percent_type1 Percentage of particles of type 1.
+ * @param finalTime Time to run the simulation.
+ * @param finalParticles [out] Vector of final particles.
+ * @param finalKineticEnergy [out] Final kinetic energy of the system.
+ */
 void testRun(int numParticles, double dt, double Lx, double Ly, double Lz,
              int testCase, double temp, double percent_type1, double finalTime,
              std::vector<Particle>& finalParticles, double& finalKineticEnergy) {
@@ -16,7 +43,9 @@ void testRun(int numParticles, double dt, double Lx, double Ly, double Lz,
     finalKineticEnergy = sims.getKineticEnergy();
 }
 
-// Test case for one stationary particle
+/**
+ * @brief Test case: Single stationary particle.
+ */
 BOOST_AUTO_TEST_CASE(ic_one) {
     std::vector<Particle> finalParticles;
     double finalKineticEnergy;
@@ -29,7 +58,9 @@ BOOST_AUTO_TEST_CASE(ic_one) {
     BOOST_CHECK_CLOSE(finalKineticEnergy, 0.0, tol);
 }
 
-// Test case for one particle with velocity
+/**
+ * @brief Test case: Single particle with velocity.
+ */
 BOOST_AUTO_TEST_CASE(ic_one_vel) {
     std::vector<Particle> finalParticles;
     double finalKineticEnergy;
@@ -42,7 +73,9 @@ BOOST_AUTO_TEST_CASE(ic_one_vel) {
     BOOST_CHECK_CLOSE(finalKineticEnergy, 15, tol);
 }
 
-// Test case for two particles (ic_two)
+/**
+ * @brief Test case: Two particles (ic_two).
+ */
 BOOST_AUTO_TEST_CASE(ic_two) {
     std::vector<Particle> finalParticles;
     double finalKineticEnergy;
@@ -58,7 +91,9 @@ BOOST_AUTO_TEST_CASE(ic_two) {
     BOOST_CHECK_CLOSE(finalKineticEnergy, 0.000515153, tol);
 }
 
-// Test case for two particles (ic_two_pass1)
+/**
+ * @brief Test case: Two particles with pass configuration 1.
+ */
 BOOST_AUTO_TEST_CASE(ic_two_pass1) {
     std::vector<Particle> finalParticles;
     double finalKineticEnergy;
@@ -74,7 +109,9 @@ BOOST_AUTO_TEST_CASE(ic_two_pass1) {
     BOOST_CHECK_CLOSE(finalKineticEnergy, 0.247955, tol);
 }
 
-// Test case for two particles (ic_two_pass2)
+/**
+ * @brief Test case: Two particles with pass configuration 2.
+ */
 BOOST_AUTO_TEST_CASE(ic_two_pass2) {
     std::vector<Particle> finalParticles;
     double finalKineticEnergy;
@@ -90,7 +127,9 @@ BOOST_AUTO_TEST_CASE(ic_two_pass2) {
     BOOST_CHECK_CLOSE(finalKineticEnergy, 0.246937, tol);
 }
 
-// Test case for two particles (ic_two_pass3)
+/**
+ * @brief Test case: Two particles with pass configuration 3.
+ */
 BOOST_AUTO_TEST_CASE(ic_two_pass3) {
     std::vector<Particle> finalParticles;
     double finalKineticEnergy;
