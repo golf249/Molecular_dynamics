@@ -10,7 +10,7 @@ if exist(particleDataFile, 'file') == 2 && dir(particleDataFile).bytes > 0
 
     % Assign column names for easier access
     data.Properties.VariableNames = {'Time', 'ParticleID', 'X', 'Y', 'Z', 'U', 'V', 'W'};
-
+    
     % Get unique particle IDs
     particleIDs = unique(data.ParticleID);
 
@@ -63,7 +63,7 @@ if exist(particleDataFile, 'file') == 2 && dir(particleDataFile).bytes > 0
 
     % Plot the trajectory of each particle
     for i = 1:length(particles)
-        plot3(particles(i).X, particles(i).Y, particles(i).Z, '-o', 'DisplayName', ['Particle ' num2str(particles(i).ID)]);
+        plot3(particles(i).X, particles(i).Y, particles(i).Z, '-', 'DisplayName', ['Particle ' num2str(particles(i).ID)]);
     end
 
     % Add a legend
@@ -104,7 +104,7 @@ if exist(kineticEnergyFile, 'file') == 2
 
     % Plot the kinetic energy over time
     figure;
-    plot(data.Time, data.KineticEnergy, '-o');
+    plot(data.Time, data.KineticEnergy, '-');
     grid on;
     xlabel('Time');
     ylabel('Kinetic Energy');
@@ -112,3 +112,18 @@ if exist(kineticEnergyFile, 'file') == 2
 else
     disp('The kinetic_energy.txt file is empty or does not exist. No kinetic energy data to plot.');
 end
+
+%%  OPENMP Plots
+
+cores = [4, 8, 16, 24, 32, 40, 48];
+
+time = [92.925, 63.49, 53.046, 57.049, 13.394, 11.802, 11.208];
+
+figure
+
+plot(cores, time, 'x-')
+xlabel("Number of threads")
+ylabel("Time to run (s)")
+grid minor
+
+
