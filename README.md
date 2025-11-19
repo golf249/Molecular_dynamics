@@ -279,11 +279,3 @@ Time integration is performed using the forward Euler method, and periodic bound
 - **CUDA (`mdcuda`)**: Best for large systems (> 10,000 particles)
 
 The parallel version uses OpenMP to distribute force calculations across CPU cores. The CUDA version offloads force calculations to the GPU for maximum performance.
-
-## Acknowledgments
-
-The code structure was partially outlined with assistance from ChatGPT 4.0, with the majority of implementation done manually.
-
-## License
-
-Please refer to the repository or contact the author for licensing information.
